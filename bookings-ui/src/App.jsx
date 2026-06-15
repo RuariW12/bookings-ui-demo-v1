@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './App.css'
+import strategyLogo from './assets/strategy.jpg'
 
 // Environments now map to their Environment ID, so the ID can be derived
 // from entitlement + CID + environment (last in the cascade waterfall).
@@ -47,6 +48,7 @@ const CSM_EMAILS = [
   "priya.nair@strategy.com",
   "dev.okafor@strategy.com",
   "sam.lindqvist@strategy.com",
+  "rwhalen@strategy.com"
 ]
 
 // Bookable = weekday and not in the past. This is where real availability
@@ -89,11 +91,49 @@ function App() {
   const firstWeekday = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay()
   const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate()
 
+  const FLOW_URL = import.meta.env.VITE_FLOW_URL
+
+  const handleBook = async () => {
+    const payload = {
+      entitlement,
+      cid,
+      environment,
+      environmentId,
+      date: date ? date.toISOString().slice(0, 10) : "",
+      time,
+      bookerName,
+      csmEmail,
+      utilityBox,
+      comments,
+      privateNotes,
+    }
+
+    console.log("Booking payload:", payload) // logs even if the network call is blocked
+
+    try {
+      const res = await fetch(FLOW_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        alert("Booking sent!")
+      } else {
+        alert("Flow responded with status " + res.status)
+      }
+    } catch (err) {
+      alert("Couldn't reach the flow (likely CORS from localhost — check the console; the payload still logged).")
+      console.error(err)
+    }
+  }
+
+
+
   return (
     <div className="page">
       <header className="brand-header">
-        <div className="logo-tile">Strategy</div>
-        <h1 className="brand-title">Parallel Build Demo</h1>
+        <img src={strategyLogo} className="logo-img" alt="Strategy" />
+        <h1 className="brand-title">Strategy</h1>
       </header>
 
       <main className="content">
@@ -262,13 +302,12 @@ function App() {
         </div>
 
         <div className="book-row">
-          <button type="button" className="book-btn">Book</button>
+          <button type="button" className="book-btn" onClick={handleBook}>Book</button>
         </div>
       </main>
 
       <footer className="site-footer">
         <p className="footer-policy">
-              Strategy
         </p>
         <hr />
       </footer>

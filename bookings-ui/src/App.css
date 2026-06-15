@@ -20,17 +20,12 @@ body {
   padding: 28px 16px 32px;
 }
 
-.logo-tile {
-  width: 96px;
-  height: 96px;
-  background: #fff;
-  border-radius: 4px;
+.logo-img {
+  display: block;
   margin: 0 auto 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #e35205;
-  font-weight: 700;
+  max-width: 240px;
+  width: 70%;
+  height: auto;
 }
 
 .brand-title {
