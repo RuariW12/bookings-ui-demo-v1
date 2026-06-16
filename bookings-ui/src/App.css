@@ -261,3 +261,39 @@ body {
   color: #bbb;
   margin: 0;
 }
+
+
+.cal-day.release-week {
+  box-shadow: inset 0 0 0 2px #b58b00;
+}
+.cal-day.release-week.selected {
+  box-shadow: inset 0 0 0 2px #fff;
+}
+
+.cal-legend {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #605e5c;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.legend-dot.release {
+  box-shadow: inset 0 0 0 2px #b58b00;
+}
+
+.warning-box {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: #fff4ce;
+  border: 1px solid #e6c200;
+  border-radius: 2px;
+  font-size: 13px;
+  color: #594b00;
+}
