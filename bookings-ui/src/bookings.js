@@ -1,6 +1,10 @@
-// this is mock data stored for the calendar page
-
 export const REGIONS = ["CLD-CTC", "CLD-EMEA", "CLD-HQ"]
+
+export const REGION_BUILD_CAPACITY = {
+  "CLD-CTC": 2,
+  "CLD-EMEA": 4,
+  "CLD-HQ": 3,
+}
 
 export const SEED_BOOKINGS = [
   {
@@ -137,6 +141,38 @@ export const SEED_BOOKINGS = [
     durationHours: 2,
     bookerName: "T. Miekisz",
     csmEmail: "tmiekisz@microstrategy.com",
+  },
+  // Two overlapping CTC builds — demo data so CTC reaches its 2-build limit.
+  // (Remove these if you don't want CTC showing as full.)
+  {
+    id: "pb-0009",
+    status: "approved",
+    region: "CLD-CTC",
+    operationType: "build",
+    operationLabel: "Environment Build",
+    title: "DR parallel build",
+    cid: "C701",
+    environment: "DR",
+    start: "2026-06-22",
+    end: "2026-06-26",
+    durationHours: 40,
+    bookerName: "P. Singh",
+    csmEmail: "pasingh@microstrategy.com",
+  },
+  {
+    id: "pb-0010",
+    status: "pending",
+    region: "CLD-CTC",
+    operationType: "build",
+    operationLabel: "Environment Build",
+    title: "SBX parallel build",
+    cid: "C702",
+    environment: "SBX",
+    start: "2026-06-23",
+    end: "2026-06-29",
+    durationHours: 40,
+    bookerName: "A. Lacuna",
+    csmEmail: "alacuna@microstrategy.com",
   },
 ]
 
