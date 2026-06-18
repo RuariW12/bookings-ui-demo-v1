@@ -86,7 +86,7 @@ export default function Schedule() {
   return (
     <div className="sched">
       <div className="sched-toolbar">
-        <h2>Parallel build schedule</h2>
+        <h2>Parallel Build Calendar</h2>
         <div className="spacer" />
         <span className="sched-range">{fmtRange(viewStart)}</span>
         <button className="sched-nav" aria-label="Previous two weeks" onClick={() => setViewStart(addDays(viewStart, -7))}>‹</button>
