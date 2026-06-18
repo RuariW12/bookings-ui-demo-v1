@@ -118,6 +118,14 @@
 .sched-rowlabel .rl-hours {
   font-size: 12px; color: #e35205; font-weight: 600; white-space: nowrap;
 }
+.sched-rowlabel .rl-cap { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.rl-builds {
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  border-radius: 10px; padding: 2px 8px;
+  color: #0b6a0b; background: #dff6dd;     /* room available */
+}
+.rl-builds.full { color: #8a5a00; background: #fff4ce; }  /* at capacity */
+.rl-builds.over { color: #a4262c; background: #fde7e9; }  /* over capacity */
 
 /* track (spans the 14 day columns) */
 .sched-track {
