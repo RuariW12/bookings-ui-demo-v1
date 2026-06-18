@@ -1,0 +1,190 @@
+// ---------------------------------------------------------------------------
+// SHARED BOOKINGS STORE
+// One record shape, read by both surfaces: the booking form (create) and the
+// Schedule page (view / cancel / move). Today this is mock data held in memory;
+// swap SEED_BOOKINGS for a fetch from the OCU-style flow / SharePoint list when
+// the backend store exists. Both surfaces should point at the same store.
+//
+// Record shape:
+//   id            stable unique id (needed for update/cancel/move)
+//   status        "approved" | "pending" | "cancelled"
+//   region        grouping row on the Schedule (placeholder for now — the
+//                 staff/assignment dimension is still an open decision)
+//   operationType "build" | "refresh" | "cutover"
+//   operationLabel display label
+//   title         free-text title shown on the bar
+//   cid, environment, environmentId
+//   start, end    ISO YYYY-MM-DD. Builds span multiple days (start..end);
+//                 refresh/cutover are single-day (start === end).
+//   startTime, endTime   refresh/cutover only
+//   durationHours staff-hours the booking consumes
+//   tier          refresh only
+//   bookerName, csmEmail, utilityBox, privateNotes
+// ---------------------------------------------------------------------------
+
+export const REGIONS = ["CLD-CTC", "CLD-EMEA", "CLD-HQ"]
+
+export const SEED_BOOKINGS = [
+  {
+    id: "pb-0001",
+    status: "approved",
+    region: "CLD-EMEA",
+    operationType: "refresh",
+    operationLabel: "MD Refresh",
+    title: "MD Refresh PROD to PREF",
+    cid: "C560",
+    environment: "PROD",
+    start: "2026-06-18",
+    end: "2026-06-18",
+    startTime: "8:30 AM",
+    endTime: "4:30 PM",
+    durationHours: 8,
+    tier: "prod_large",
+    bookerName: "A. Sampalione",
+    csmEmail: "asampalione@microstrategy.com",
+  },
+  {
+    id: "pb-0002",
+    status: "approved",
+    region: "CLD-EMEA",
+    operationType: "build",
+    operationLabel: "Environment Build",
+    title: "PROD parallel build",
+    cid: "C689",
+    environment: "PROD",
+    start: "2026-06-22",
+    end: "2026-06-26",
+    durationHours: 40,
+    bookerName: "V. Solignac",
+    csmEmail: "vsolignac@microstrategy.com",
+  },
+  {
+    id: "pb-0003",
+    status: "pending",
+    region: "CLD-EMEA",
+    operationType: "refresh",
+    operationLabel: "MD Refresh",
+    title: "QA refresh",
+    cid: "C560",
+    environment: "QA",
+    start: "2026-06-23",
+    end: "2026-06-23",
+    startTime: "10:00 AM",
+    endTime: "4:00 PM",
+    durationHours: 6,
+    tier: "lower",
+    bookerName: "B. Colin",
+    csmEmail: "bcolin@microstrategy.com",
+  },
+  {
+    id: "pb-0004",
+    status: "approved",
+    region: "CLD-HQ",
+    operationType: "build",
+    operationLabel: "Environment Build",
+    title: "DEV parallel build",
+    cid: "C802",
+    environment: "DEV",
+    start: "2026-06-15",
+    end: "2026-06-19",
+    durationHours: 40,
+    bookerName: "M. Scaggs",
+    csmEmail: "mscaggs@microstrategy.com",
+  },
+  {
+    id: "pb-0005",
+    status: "approved",
+    region: "CLD-HQ",
+    operationType: "cutover",
+    operationLabel: "Cutover",
+    title: "Cutover C802",
+    cid: "C802",
+    environment: "PROD",
+    start: "2026-06-19",
+    end: "2026-06-19",
+    startTime: "11:00 AM",
+    endTime: "1:00 PM",
+    durationHours: 2,
+    bookerName: "R. Lam",
+    csmEmail: "rlam@microstrategy.com",
+  },
+  {
+    id: "pb-0006",
+    status: "pending",
+    region: "CLD-HQ",
+    operationType: "cutover",
+    operationLabel: "Cutover",
+    title: "Cutover C757",
+    cid: "C757",
+    environment: "DEV",
+    start: "2026-06-22",
+    end: "2026-06-22",
+    startTime: "1:00 PM",
+    endTime: "3:00 PM",
+    durationHours: 2,
+    bookerName: "D. Stout",
+    csmEmail: "dstout@microstrategy.com",
+  },
+  {
+    id: "pb-0007",
+    status: "approved",
+    region: "CLD-CTC",
+    operationType: "refresh",
+    operationLabel: "MD Refresh",
+    title: "UAT refresh",
+    cid: "C689",
+    environment: "UAT",
+    start: "2026-06-24",
+    end: "2026-06-24",
+    startTime: "8:30 AM",
+    endTime: "2:30 PM",
+    durationHours: 6,
+    tier: "lower",
+    bookerName: "K. Sakamoto",
+    csmEmail: "ksakamoto@microstrategy.com",
+  },
+  {
+    id: "pb-0008",
+    status: "cancelled",
+    region: "CLD-CTC",
+    operationType: "cutover",
+    operationLabel: "Cutover",
+    title: "Cutover C560 (cancelled)",
+    cid: "C560",
+    environment: "PROD",
+    start: "2026-06-16",
+    end: "2026-06-16",
+    startTime: "11:30 AM",
+    endTime: "1:30 PM",
+    durationHours: 2,
+    bookerName: "T. Miekisz",
+    csmEmail: "tmiekisz@microstrategy.com",
+  },
+]
+
+// Map a booking-form payload into a calendar record. This is the seam between
+// the two surfaces — when create writes to the shared store, it runs through here.
+export function fromFormPayload(p, id) {
+  const isBuild = p.operationType === "build"
+  return {
+    id,
+    status: "pending",
+    region: null, // assignment / region is decided later (manager step, TBD)
+    operationType: p.operationType,
+    operationLabel: p.operationLabel,
+    title: p.operationLabel,
+    cid: p.cid,
+    environment: p.environment,
+    environmentId: p.environmentId,
+    start: isBuild ? p.buildWindowStart : p.date,
+    end: isBuild ? p.buildWindowEnd : p.date,
+    startTime: p.startTime,
+    endTime: p.endTime,
+    durationHours: p.durationHours,
+    tier: p.tier,
+    bookerName: p.bookerName,
+    csmEmail: p.csmEmail,
+    utilityBox: p.utilityBox,
+    privateNotes: p.privateNotes,
+  }
+}
