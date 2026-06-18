@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import './App.css'
-import strategyLogo from './assets/strategy.jpg'
 
 const OPERATION_TYPES = {
   build: {
     label: "Environment Build",
-    anchor: "start",         // CSM picks the START date; build runs 5 business days forward 
+    anchor: "start",         // CSM picks the START date; build runs 5 business days forward (inclusive)
     pickTime: false,         // a multi-day span, not a time-of-day booking
     spanBusinessDays: 5,
     hoursPerDay: 8,
@@ -23,20 +22,23 @@ const OPERATION_TYPES = {
     anchor: "day",
     pickTime: true,
     hours: 2,
-    leadDays: 7,            // min 1 week, unless
+    leadDays: 7,            // min 1 week, but...
     weekendLeadDays: 14,    // ...2 weeks if the chosen date is a weekend
   },
 }
 
-const DAILY_CAPACITY_HOURS = null           
-const EXISTING_BOOKINGS = []              
+const DAILY_CAPACITY_HOURS = null            // TODO: confirm with cloud support
+const EXISTING_BOOKINGS = []                 // TODO: replace with read from OCU-style flow / SharePoint
 
 function dayCapacityReached(/* day */) {
-  if (DAILY_CAPACITY_HOURS == null) return false  
+  if (DAILY_CAPACITY_HOURS == null) return false   // unknown → never block (stub)
+  // TODO: sum EXISTING_BOOKINGS footprint hours overlapping `day` (including
+  // build spans, which occupy 8h/day across 5 business days) and compare:
+  //   return load >= DAILY_CAPACITY_HOURS
   return false
 }
 
-const SLOTS = ["8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:30 AM", "12:00 PM", "12:30 PM", "1:00 PM"]
+const SLOTS = ["8:30 AM", "10:00 AM", "11:30 AM", "1:00 PM"]
 const DOW = ["S", "M", "T", "W", "T", "F", "S"]
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -118,7 +120,8 @@ function addDays(d, n) {
 function isWeekend(d) {
   const x = d.getDay(); return x === 0 || x === 6
 }
-// TZ-safe local YYYY-MM-DD: avoids the UTC day-shift
+// TZ-safe local YYYY-MM-DD (avoids the UTC day-shift; also cleaner for the
+// timezone work coming later).
 function fmtISO(d) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, "0")
@@ -266,16 +269,7 @@ function App() {
   const canBook = !!operationType && !!date && (!cfg.pickTime || !!time)
 
   return (
-    <div className="page">
-      <header className="brand-header">
-        <img src={strategyLogo} className="logo-img" alt="Strategy" />
-      </header>
-
-      <main className="content">
-        <div className="service-card">
-          <div className="service-name">Parallel Build Scheduler</div>
-        </div>
-
+    <>
         <div className="field">
           <label>Operation type</label>
           <select value={operationType} onChange={(e) => onTypeChange(e.target.value)}>
@@ -434,13 +428,7 @@ function App() {
         <div className="book-row">
           <button type="button" className="book-btn" onClick={handleBook} disabled={!canBook}>Book</button>
         </div>
-      </main>
-
-      <footer className="site-footer">
-        <p className="footer-policy"></p>
-        <hr />
-      </footer>
-    </div>
+    </>
   )
 }
 
