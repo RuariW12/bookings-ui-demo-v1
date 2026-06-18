@@ -27,8 +27,6 @@ const OPERATION_TYPES = {
   },
 }
 
-const DAILY_CAPACITY_HOURS = null            
-const EXISTING_BOOKINGS = []                 
 
 function dayCapacityReached(/* day */) {
   if (DAILY_CAPACITY_HOURS == null) return false   // unknown → never block (stub)
