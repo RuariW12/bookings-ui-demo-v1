@@ -229,16 +229,35 @@
 .btn-done { border: none; background: #e35205; color: #fff; }
 .btn-done:hover { background: #c2410c; }
 
-/* app-level tab nav (used by Root) */
-.app-tabs {
-  display: flex; gap: 4px; background: #e35205; padding: 0 20px;
+/* page switcher living inside the orange .service-card bar */
+.service-card.service-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
 }
-.app-tab {
-  border: none; background: none; color: #ffd9c4; font: inherit; font-size: 14px;
-  font-weight: 600; padding: 12px 16px; cursor: pointer; border-bottom: 3px solid transparent;
+.service-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: #ffd9c4;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 14px 16px;
+  cursor: pointer;
 }
-.app-tab:hover { color: #fff; }
-.app-tab.active { color: #fff; border-bottom-color: #fff; }
+.service-tab:hover { color: #fff; }
+.service-tab.active {
+  color: #fff;
+  background: #e35205; /* lighter than the #c2410c bar */
+}
+
+/* On the Schedule tab the whole frame widens so more of the timeline shows.
+   .page.page--wide beats App.css's `.page { max-width: 780px }` on specificity,
+   so it wins regardless of stylesheet order. */
+.page { transition: max-width 0.2s ease; }
+.page.page--wide { max-width: 1400px; }
 
 @media (max-width: 560px) {
   .sched-board { grid-template-columns: 150px repeat(14, 88px); }

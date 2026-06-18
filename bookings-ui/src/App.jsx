@@ -46,6 +46,8 @@ const MONTHS = [
 ]
 
 const CSM_EMAILS = [
+  // example //
+  "rwhalen@strategy.com",
   // -- Anibal Sampalione --
   "falterleib@microstrategy.com",
   "fsastre@microstrategy.com",
