@@ -2,18 +2,38 @@ import { useState } from 'react'
 import './App.css'
 import strategyLogo from './assets/strategy.jpg'
 
-// Environments map to their Environment ID, derived from entitlement + CID + environment.
-// Each CID exposes only its own valid subset of environments.
-// Full possible environment type set: PROD, DEV, UAT, QA, SBX, ADHOC, SIT, PERF, TEST, OTHER, DR
-const DATA = {
-  "Entitlement A": {
-    "CID-1001": { "PROD": "env-1001-prod", "DEV": "env-1001-dev", "UAT": "env-1001-uat", "DR": "env-1001-dr" },
-    "CID-1002": { "DEV": "env-1002-dev", "QA": "env-1002-qa", "SBX": "env-1002-sbx", "TEST": "env-1002-test" },
+const OPERATION_TYPES = {
+  build: {
+    label: "Environment Build",
+    anchor: "start",         // CSM picks the START date; build runs 5 business days forward 
+    pickTime: false,         // a multi-day span, not a time-of-day booking
+    spanBusinessDays: 5,
+    hoursPerDay: 8,
+    leadDays: 14,            // min 2 weeks
   },
-  "Entitlement B": {
-    "CID-2001": { "PROD": "env-2001-prod", "UAT": "env-2001-uat", "SIT": "env-2001-sit", "PERF": "env-2001-perf", "ADHOC": "env-2001-adhoc" },
-    "CID-2002": { "DEV": "env-2002-dev", "OTHER": "env-2002-other" },
+  refresh: {
+    label: "MD Refresh",
+    anchor: "day",
+    pickTime: true,
+    hoursByTier: { lower: 6, prod_large: 8 },  // 6h lower-tier, 8h PROD/large
+    leadDays: 7,            // min 1 week
   },
+  cutover: {
+    label: "Cutover",
+    anchor: "day",
+    pickTime: true,
+    hours: 2,
+    leadDays: 7,            // min 1 week, unless
+    weekendLeadDays: 14,    // ...2 weeks if the chosen date is a weekend
+  },
+}
+
+const DAILY_CAPACITY_HOURS = null           
+const EXISTING_BOOKINGS = []              
+
+function dayCapacityReached(/* day */) {
+  if (DAILY_CAPACITY_HOURS == null) return false  
+  return false
 }
 
 const SLOTS = ["8:30 AM", "10:00 AM", "11:30 AM", "1:00 PM"]
@@ -24,107 +44,208 @@ const MONTHS = [
 ]
 
 const CSM_EMAILS = [
-  "alex.morgan@strategy.com",
-  "priya.nair@strategy.com",
-  "dev.okafor@strategy.com",
-  "sam.lindqvist@strategy.com",
-  "rwhalen@strategy.com",
+  // -- Anibal Sampalione --
+  "falterleib@microstrategy.com",
+  "fsastre@microstrategy.com",
+  "mfidalgo@microstrategy.com",
+  "lguglialmelli@microstrategy.com",
+  "smartino@microstrategy.com",
+  "edgarcia@microstrategy.com",
+  // -- David Underwood --
+  "cnagelschmitz@microstrategy.com",
+  "yvanchenko@microstrategy.com",
+  "mrielau@microstrategy.com",
+  "omarchal@microstrategy.com",
+  "wcruz@microstrategy.com",
+  "vsolignac@microstrategy.com",
+  "dpaschoud@microstrategy.com",
+  // -- Francesca Laurie --
+  "cpisonero@microstrategy.com",
+  "jhlee@microstrategy.com",
+  "svadgama@microstrategy.com",
+  "frausell@strategy.com",
+  "ksakamoto@microstrategy.com",
+  "pasingh@microstrategy.com",
+  "alacuna@microstrategy.com",
+  // -- Jane Hall --
+  "mscaggs@microstrategy.com",
+  "rlam@microstrategy.com",
+  "ngerontiev@microstrategy.com",
+  "dstout@microstrategy.com",
+  "mbanos@microstrategy.com",
+  "anogalpoziombka@microstrategy.com",
+  "togrady@microstrategy.com",
+  "kforth@microstrategy.com",
+  // -- Neeraj Bindra --
+  "mharouaka@microstrategy.com",
+  "nskees@microstrategy.com",
+  "jheagerty@microstrategy.com",
+  "gpullis@microstrategy.com",
+  "epayne@microstrategy.com",
+  // -- Zeena Husayni --
+  "asampalione@microstrategy.com",
+  "csegal@microstrategy.com",
+  "tmiekisz@microstrategy.com",
+  "lkirzner@microstrategy.com",
+  "lneslin@microstrategy.com",
+  // -- Sunil Vadgama --
+  "pkaushal@microstrategy.com",
+  "ptidke@microstrategy.com",
+  "snaik@microstrategy.com",
+  "alambat@microstrategy.com",
+  "sveer@microstrategy.com",
+  // -- Veronica Solignac --
+  "bcolin@microstrategy.com",
+  "abhagat@microstrategy.com",
+  "jfaulknerjones@microstrategy.com",
+  "aburns@microstrategy.com",
+  // -- More teams --
+  "aupadhyay@microstrategy.com",
+  // -- Internal --
+  "ctmoperations@strategyInternal.com",
+  // -- Other CSMs --
+  "miyamamoto@microstrategy.com",
+  "bbahia@microstrategy.com",
 ]
 
-// --- Scheduling rules (PROTOTYPE — confirm exact values with CSM) ---
-// Booking window: at least 1 week ahead, up to 90 days (from OCU docs).
-const MIN_LEAD_DAYS = 7
-const MAX_LEAD_DAYS = 90
-
-// Quarterly major releases: Mar, Jun, Sep, Dec, ~3rd week. Months are 0-indexed.
-// Using the Monday of the 3rd week as a placeholder boundary date per year.
-const RELEASE_MONTHS = [2, 5, 8, 11] // March, June, September, December
-function releaseDateFor(year, month) {
-  // ~3rd week: day 15 is a reasonable placeholder until the real calendar is confirmed.
-  return new Date(year, month, 15)
+// --- date helpers ----------------------------------------------------------
+function startOfToday() {
+  const t = new Date(); t.setHours(0, 0, 0, 0); return t
 }
-// Build the list of release boundary dates spanning the years we might show.
-function getReleaseDates() {
-  const years = [2025, 2026, 2027]
-  const dates = []
-  years.forEach((y) => RELEASE_MONTHS.forEach((m) => dates.push(releaseDateFor(y, m))))
-  return dates
+function addDays(d, n) {
+  const x = new Date(d); x.setDate(x.getDate() + n); return x
 }
-const RELEASE_DATES = getReleaseDates()
-
-// Is a given day within the same release-week we mark on the calendar?
-function isReleaseWeek(d) {
-  return RELEASE_DATES.some((r) => {
-    const diff = Math.abs(d - r) / (1000 * 60 * 60 * 24)
-    return d.getFullYear() === r.getFullYear() && d.getMonth() === r.getMonth() && diff < 4
-  })
+function isWeekend(d) {
+  const x = d.getDay(); return x === 0 || x === 6
 }
-
-// The next release boundary on or after a given date.
-function nextReleaseAfter(d) {
-  return RELEASE_DATES.filter((r) => r >= d).sort((a, b) => a - b)[0] || null
+// TZ-safe local YYYY-MM-DD (avoids the UTC day-shift; also cleaner for the
+// timezone work coming later).
+function fmtISO(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
 }
-
-// Bookable = weekday, within the 1-week–90-day window.
-function isBookable(d) {
-  const day = d.getDay()
-  if (day === 0 || day === 6) return false // no weekends
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const min = new Date(today); min.setDate(min.getDate() + MIN_LEAD_DAYS)
-  const max = new Date(today); max.setDate(max.getDate() + MAX_LEAD_DAYS)
-  return d >= min && d <= max
+function fmtShort(d) {
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+}
+// The n business days starting from `startDate` (inclusive), going forward,
+// skipping weekends. The start date is the first build day.
+function businessDaysFrom(startDate, n) {
+  const out = []
+  const d = new Date(startDate)
+  while (out.length < n) {
+    if (!isWeekend(d)) out.push(new Date(d))
+    d.setDate(d.getDate() + 1)
+  }
+  return out
+}
+// Effective lead time in days for a given type + chosen date.
+function leadDaysFor(type, day) {
+  const cfg = OPERATION_TYPES[type]
+  if (!cfg) return 0
+  if (type === "cutover") return isWeekend(day) ? cfg.weekendLeadDays : cfg.leadDays
+  return cfg.leadDays
+}
+// Total staff-hours a booking consumes.
+function operationHours(type, tier) {
+  if (type === "build") return OPERATION_TYPES.build.spanBusinessDays * OPERATION_TYPES.build.hoursPerDay
+  if (type === "refresh") return OPERATION_TYPES.refresh.hoursByTier[tier] ?? 8
+  if (type === "cutover") return OPERATION_TYPES.cutover.hours
+  return 0
+}
+// Start label "8:30 AM" + whole hours -> end label.
+function computeEndTime(startLabel, hours) {
+  const m = startLabel.match(/(\d+):(\d+)\s*(AM|PM)/i)
+  if (!m) return ""
+  let h = parseInt(m[1], 10) % 12
+  if (/PM/i.test(m[3])) h += 12
+  const start = h * 60 + parseInt(m[2], 10)
+  const end = start + hours * 60
+  const eh = Math.floor(end / 60), em = end % 60
+  const ampm = eh >= 12 ? "PM" : "AM"
+  const dispH = ((eh + 11) % 12) + 1
+  return `${dispH}:${String(em).padStart(2, "0")} ${ampm}`
 }
 
 function App() {
-  // cascade
+  // operation
+  const [operationType, setOperationType] = useState("")  // "" | build | refresh | cutover
+  const [tier, setTier] = useState("prod_large")           // refresh only: lower | prod_large
+
+  // entry (manual — autofill deferred until data is reliable)
   const [entitlement, setEntitlement] = useState("")
   const [cid, setCid] = useState("")
   const [environment, setEnvironment] = useState("")
+  const [environmentId, setEnvironmentId] = useState("")
 
   // calendar
-  const [date, setDate] = useState(null)
-  const [time, setTime] = useState("")
-  const [viewDate, setViewDate] = useState(new Date(2026, 5, 1)) // June 2026
+  const [date, setDate] = useState(null)   // build: delivery date; refresh/cutover: operation date
+  const [time, setTime] = useState("")     // start time (refresh/cutover only)
+  const [viewDate, setViewDate] = useState(new Date(2026, 5, 1))
 
   // details
   const [bookerName, setBookerName] = useState("")
   const [csmEmail, setCsmEmail] = useState("")
   const [utilityBox, setUtilityBox] = useState("")
-  const [comments, setComments] = useState("")
   const [privateNotes, setPrivateNotes] = useState("")
 
-  // Environment ID is derived, not picked.
-  const environmentId =
-    entitlement && cid && environment ? DATA[entitlement][cid][environment] : ""
+  const cfg = operationType ? OPERATION_TYPES[operationType] : null
+  const hours = operationType ? operationHours(operationType, tier) : 0
+  const buildSpan = operationType === "build" && date ? businessDaysFrom(date, cfg.spanBusinessDays) : []
+  const endTime = cfg && cfg.pickTime && time ? computeEndTime(time, hours) : ""
 
-  const prevMonth = () =>
-    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))
-  const nextMonth = () =>
-    setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))
+  const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))
+  const nextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))
 
   const firstWeekday = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay()
   const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate()
 
-  // Warn if the chosen date falls after the next release boundary.
-  const releaseWarning = (() => {
-    if (!date) return ""
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const upcoming = nextReleaseAfter(today)
-    if (upcoming && date > upcoming) {
-      const label = `${MONTHS[upcoming.getMonth()]} ${upcoming.getFullYear()}`
-      return `This date falls after the ${label} release. Environments booked before it will be on a different release — confirm all related OCUs land on the same side of the release boundary.`
+  // Picking a new operation type clears any date/time that may no longer be valid.
+  const onTypeChange = (t) => {
+    setOperationType(t)
+    setDate(null)
+    setTime("")
+    if (t !== "refresh") setTier("prod_large")
+  }
+
+  // Is `day` a valid choice given the selected operation type?
+  function isSelectable(day) {
+    if (!operationType) return false
+    if (day < startOfToday()) return false
+    if (dayCapacityReached(day)) return false           // inert until capacity known
+    // Refresh defaults to weekdays only — the doc gives no weekend provision
+    // for refresh (only cutover names one). Flip this if confirmed otherwise.
+    if (operationType === "refresh" && isWeekend(day)) return false
+    if (operationType === "build") {
+      // Build starts on the selected day and runs 5 business days forward, so
+      // the start must be a weekday and at least 2 weeks out.
+      if (isWeekend(day)) return false
+      return day >= addDays(startOfToday(), cfg.leadDays)
     }
-    return ""
-  })()
+    return day >= addDays(startOfToday(), leadDaysFor(operationType, day))
+  }
+
+  const inBuildSpan = (day) => buildSpan.some((s) => s.toDateString() === day.toDateString())
 
   const FLOW_URL = import.meta.env.VITE_FLOW_URL
 
   const handleBook = async () => {
     const payload = {
+      operationType,
+      operationLabel: cfg?.label || "",
+      tier: operationType === "refresh" ? tier : null,
+      durationHours: hours,
       entitlement, cid, environment, environmentId,
-      date: date ? date.toISOString().slice(0, 10) : "",
-      time, bookerName, csmEmail, utilityBox, comments, privateNotes,
+      // date semantics differ by type. Build is START-anchored: the selected
+      // date is the first of 5 business days (delivery per the doc falls on/
+      // after the window end and is not captured here).
+      buildWindowStart: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[0]) : null,
+      buildWindowEnd: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[buildSpan.length - 1]) : null,
+      date: operationType !== "build" && date ? fmtISO(date) : null,
+      startTime: cfg?.pickTime ? time : null,
+      endTime: endTime || null,
+      bookerName, csmEmail, utilityBox, privateNotes,
     }
 
     console.log("Booking payload:", payload)
@@ -135,16 +256,15 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       })
-      if (res.ok) {
-        alert("Booking sent!")
-      } else {
-        alert("Flow responded with status " + res.status)
-      }
+      if (res.ok) alert("Booking sent!")
+      else alert("Flow responded with status " + res.status)
     } catch (err) {
       alert("Couldn't reach the flow (likely CORS from localhost — check the console; the payload still logged).")
       console.error(err)
     }
   }
+
+  const canBook = !!operationType && !!date && (!cfg.pickTime || !!time)
 
   return (
     <div className="page">
@@ -155,74 +275,62 @@ function App() {
 
       <main className="content">
         <div className="service-card">
-          <div className="service-name">OCU Booking Process</div>
+          <div className="service-name">Parallel Build Scheduler</div>
         </div>
 
         <div className="field">
-          <label>Entitlement</label>
-          <select
-            required
-            value={entitlement}
-            onChange={(e) => {
-              setEntitlement(e.target.value)
-              setCid("")
-              setEnvironment("")
-            }}
-          >
+          <label>Operation type</label>
+          <select value={operationType} onChange={(e) => onTypeChange(e.target.value)}>
             <option value="">-- select an option --</option>
-            {Object.keys(DATA).map((ent) => (
-              <option key={ent} value={ent}>{ent}</option>
-            ))}
+            <option value="build">Environment Build</option>
+            <option value="refresh">MD Refresh</option>
+            <option value="cutover">Cutover</option>
           </select>
+        </div>
+
+        {operationType === "refresh" && (
+          <div className="field">
+            <label>Environment tier</label>
+            <select value={tier} onChange={(e) => setTier(e.target.value)}>
+              <option value="prod_large">PROD / large (8h)</option>
+              <option value="lower">Lower-tier (6h)</option>
+            </select>
+          </div>
+        )}
+
+        {cfg && (
+          <div className="warning-box" style={{ background: "#eef4ff", borderColor: "#9db8e8" }}>
+            <strong>{cfg.label}</strong> · {hours}h
+            {operationType === "build" && " across 5 business days from the start date"}
+            {" · "}
+            {operationType === "build" && "book at least 2 weeks ahead"}
+            {operationType === "refresh" && "book at least 1 week ahead"}
+            {operationType === "cutover" && "book at least 1 week ahead (2 weeks for weekend dates)"}
+          </div>
+        )}
+
+        <div className="field">
+          <label>Entitlement</label>
+          <input type="text" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} placeholder="Enter entitlement" />
         </div>
 
         <div className="field">
           <label>CID</label>
-          <select
-            required
-            value={cid}
-            disabled={!entitlement}
-            onChange={(e) => {
-              setCid(e.target.value)
-              setEnvironment("")
-            }}
-          >
-            <option value="">-- select an option --</option>
-            {entitlement &&
-              Object.keys(DATA[entitlement]).map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-          </select>
+          <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} placeholder="Enter CID" />
         </div>
 
         <div className="field">
           <label>Environment</label>
-          <select
-            required
-            value={environment}
-            disabled={!cid}
-            onChange={(e) => setEnvironment(e.target.value)}
-          >
-            <option value="">-- select an option --</option>
-            {entitlement && cid &&
-              Object.keys(DATA[entitlement][cid]).map((env) => (
-                <option key={env} value={env}>{env}</option>
-              ))}
-          </select>
+          <input type="text" value={environment} onChange={(e) => setEnvironment(e.target.value)} placeholder="e.g. PROD, DEV, UAT" />
         </div>
 
         <div className="field">
-          <label>Environment ID (auto-filled)</label>
-          <input
-            type="text"
-            value={environmentId}
-            readOnly
-            placeholder="Select CID and environment"
-          />
+          <label>Environment ID</label>
+          <input type="text" value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} placeholder="e.g. env-1001-prod" />
         </div>
 
         <div className="field">
-          <label>Select a date and time</label>
+          <label>{operationType === "build" ? "Select a build start date" : "Select a date and time"}</label>
           <div className="cal-row">
             <div className="cal">
               <div className="cal-head">
@@ -232,66 +340,66 @@ function App() {
               </div>
 
               <div className="cal-grid">
-                {DOW.map((d, i) => (
-                  <div key={i} className="cal-dow">{d}</div>
-                ))}
-
-                {Array.from({ length: firstWeekday }).map((_, i) => (
-                  <div key={"blank" + i} />
-                ))}
+                {DOW.map((d, i) => <div key={i} className="cal-dow">{d}</div>)}
+                {Array.from({ length: firstWeekday }).map((_, i) => <div key={"blank" + i} />)}
 
                 {Array.from({ length: daysInMonth }).map((_, i) => {
                   const dayNum = i + 1
                   const thisDay = new Date(viewDate.getFullYear(), viewDate.getMonth(), dayNum)
-                  const bookable = isBookable(thisDay)
+                  const selectable = isSelectable(thisDay)
                   const selected = date && date.toDateString() === thisDay.toDateString()
-                  const release = isReleaseWeek(thisDay)
+                  const span = operationType === "build" && inBuildSpan(thisDay)
                   return (
                     <button
                       key={dayNum}
                       type="button"
-                      disabled={!bookable}
-                      title={release ? "Release week" : undefined}
-                      className={
-                        "cal-day" +
-                        (selected ? " selected" : "") +
-                        (release ? " release-week" : "")
-                      }
-                      onClick={() => {
-                        setDate(thisDay)
-                        setTime("")
-                      }}
+                      disabled={!selectable}
+                      title={span ? "Reserved build day" : undefined}
+                      className={"cal-day" + (selected ? " selected" : "")}
+                      style={span ? { background: "#dce7fb", borderColor: "#9db8e8" } : undefined}
+                      onClick={() => { setDate(thisDay); setTime("") }}
                     >
                       {dayNum}
                     </button>
                   )
                 })}
               </div>
-
-              <div className="cal-legend">
-                <span className="legend-dot release" /> Release week (major release ~3rd week)
-              </div>
             </div>
 
             <div className="cal-times">
-              {date ? (
-                SLOTS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    className={"slot" + (time === t ? " selected" : "")}
-                    onClick={() => setTime(t)}
-                  >
-                    {t}
-                  </button>
-                ))
+              {!operationType ? (
+                <div className="cal-hint">Select an operation type first.</div>
+              ) : !date ? (
+                <div className="cal-hint">
+                  {operationType === "build" ? "Select a build start date." : "Select a date to see start times."}
+                </div>
+              ) : operationType === "build" ? (
+                <div className="cal-hint">
+                  <div><strong>Build window</strong></div>
+                  <div>{buildSpan.length ? `${fmtShort(buildSpan[0])} – ${fmtShort(buildSpan[buildSpan.length - 1])}` : ""}</div>
+                  <div style={{ marginTop: 6, fontSize: "0.85em" }}>5 business days · starts {fmtShort(date)}</div>
+                </div>
               ) : (
-                <div className="cal-hint">Select a date to see available times.</div>
+                <>
+                  {SLOTS.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      className={"slot" + (time === t ? " selected" : "")}
+                      onClick={() => setTime(t)}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                  {time && (
+                    <div className="cal-hint" style={{ marginTop: 8 }}>
+                      {hours}h · {time} – {endTime}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
-
-          {releaseWarning && <div className="warning-box">{releaseWarning}</div>}
 
           <div className="tz">All times are in (UTC−05:00) Eastern Time (US &amp; Canada)</div>
         </div>
@@ -300,20 +408,14 @@ function App() {
 
         <div className="field">
           <label>Name of booker</label>
-          <input
-            type="text"
-            value={bookerName}
-            onChange={(e) => setBookerName(e.target.value)}
-          />
+          <input type="text" value={bookerName} onChange={(e) => setBookerName(e.target.value)} />
         </div>
 
         <div className="field">
           <label>CSM email address</label>
           <select value={csmEmail} onChange={(e) => setCsmEmail(e.target.value)}>
             <option value="">-- select an option --</option>
-            {CSM_EMAILS.map((email) => (
-              <option key={email} value={email}>{email}</option>
-            ))}
+            {CSM_EMAILS.map((email) => <option key={email} value={email}>{email}</option>)}
           </select>
         </div>
 
@@ -332,7 +434,7 @@ function App() {
         </div>
 
         <div className="book-row">
-          <button type="button" className="book-btn" onClick={handleBook}>Book</button>
+          <button type="button" className="book-btn" onClick={handleBook} disabled={!canBook}>Book</button>
         </div>
       </main>
 
