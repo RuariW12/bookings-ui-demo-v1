@@ -98,7 +98,7 @@ export default function Schedule() {
         <span><i className="lg-build" />Build</span>
         <span><i className="lg-refresh" />MD Refresh</span>
         <span><i className="lg-cutover" />Cutover</span>
-        <span style={{ marginLeft: "auto" }}>Dashed = pending · faded = cancelled</span>
+        <span style={{ marginLeft: "auto" }}>Solid = Booked · Dashed = pending · faded = cancelled</span>
       </div>
 
       <div className="sched-scroll">
