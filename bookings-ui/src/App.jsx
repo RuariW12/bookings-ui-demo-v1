@@ -302,22 +302,22 @@ function App() {
 
         <div className="field">
           <label>Entitlement</label>
-          <input type="text" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} placeholder="Enter entitlement" />
+          <input type="text" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} />
         </div>
 
         <div className="field">
           <label>CID</label>
-          <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} placeholder="Enter CID" />
+          <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} />
         </div>
 
         <div className="field">
           <label>Environment</label>
-          <input type="text" value={environment} onChange={(e) => setEnvironment(e.target.value)} placeholder="e.g. PROD, DEV, UAT" />
+          <input type="text" value={environment} onChange={(e) => setEnvironment(e.target.value)} />
         </div>
 
         <div className="field">
           <label>Environment ID</label>
-          <input type="text" value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} placeholder="e.g. env-1001-prod" />
+          <input type="text" value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} />
         </div>
 
         <div className="field">
