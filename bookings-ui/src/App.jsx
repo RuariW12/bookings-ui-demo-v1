@@ -398,7 +398,7 @@ function App() {
         <h3 className="section-head">Your details</h3>
 
         <div className="field">
-          <label>Name of booker</label>
+          <label>Your Name</label>
           <input type="text" value={bookerName} onChange={(e) => setBookerName(e.target.value)} />
         </div>
 
