@@ -53,7 +53,7 @@ function assignLanes(items) {
   })
 }
 
-// Most builds running on the same day within the visible window — i.e. peak lanes used.
+// Most builds running on the same day within the visible window 
 function peakConcurrentBuilds(builds, days) {
   let peak = 0
   for (const d of days) {
