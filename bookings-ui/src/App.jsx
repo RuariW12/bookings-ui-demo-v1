@@ -27,14 +27,11 @@ const OPERATION_TYPES = {
   },
 }
 
-const DAILY_CAPACITY_HOURS = null            // TODO: confirm with cloud support
-const EXISTING_BOOKINGS = []                 // TODO: replace with read from OCU-style flow / SharePoint
+const DAILY_CAPACITY_HOURS = null            
+const EXISTING_BOOKINGS = []                 
 
 function dayCapacityReached(/* day */) {
   if (DAILY_CAPACITY_HOURS == null) return false   // unknown → never block (stub)
-  // TODO: sum EXISTING_BOOKINGS footprint hours overlapping `day` (including
-  // build spans, which occupy 8h/day across 5 business days) and compare:
-  //   return load >= DAILY_CAPACITY_HOURS
   return false
 }
 
