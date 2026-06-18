@@ -20,6 +20,13 @@ function dayDiff(a, b) { return Math.round((strip(a) - strip(b)) / 86400000) }
 function isWeekend(d) { const x = d.getDay(); return x === 0 || x === 6 }
 function sameDay(a, b) { return strip(a).getTime() === strip(b).getTime() }
 function sundayOf(d) { return addDays(strip(d), -d.getDay()) }
+function countWeekdays(startISO, endISO) {
+  let d = parseISO(startISO)
+  const end = parseISO(endISO)
+  let n = 0
+  while (d <= end) { if (!isWeekend(d)) n++; d = addDays(d, 1) }
+  return n
+}
 function fmtRange(start) {
   const end = addDays(start, NUM_DAYS - 1)
   const opt = { month: "short", day: "numeric" }
@@ -76,21 +83,10 @@ export default function Schedule() {
   const updateBooking = (id, patch) =>
     setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } : b)))
 
-  const moveTo = (id, newStartISO) => {
-    setBookings((bs) => bs.map((b) => {
-      if (b.id !== id) return b
-      const delta = dayDiff(parseISO(newStartISO), parseISO(b.start))
-      return { ...b, start: newStartISO, end: fmtISO(addDays(parseISO(b.end), delta)) }
-    }))
-  }
-
-  const setTime = (id, startTime, durationHours) =>
-    updateBooking(id, { startTime, endTime: computeEndTime(startTime, durationHours) })
-
   return (
     <div className="sched">
       <div className="sched-toolbar">
-        <h2>Parallel build Calendar</h2>
+        <h2>Parallel build schedule</h2>
         <div className="spacer" />
         <span className="sched-range">{fmtRange(viewStart)}</span>
         <button className="sched-nav" aria-label="Previous two weeks" onClick={() => setViewStart(addDays(viewStart, -7))}>‹</button>
@@ -179,72 +175,151 @@ export default function Schedule() {
 
       {selected && (
         <DetailModal
+          key={selected.id}
           b={selected}
-          onClose={() => setSelectedId(null)}
-          onMove={(iso) => moveTo(selected.id, iso)}
-          onTime={(t) => setTime(selected.id, t, selected.durationHours)}
-          onCancel={() => updateBooking(selected.id, { status: "cancelled" })}
+          onSave={(patch) => updateBooking(selected.id, patch)}
+          onCancelBooking={() => updateBooking(selected.id, { status: "cancelled" })}
           onRestore={() => updateBooking(selected.id, { status: "pending" })}
+          onClose={() => setSelectedId(null)}
         />
       )}
     </div>
   )
 }
 
-function DetailModal({ b, onClose, onMove, onTime, onCancel, onRestore }) {
+function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
   const isBuild = b.operationType === "build"
+  const pickTime = b.operationType !== "build"
+
+  const [title, setTitle] = useState(b.title || b.operationLabel || "")
+  const [start, setStart] = useState(b.start)
+  const [end, setEnd] = useState(b.end)
+  const [startTime, setStartTime] = useState(b.startTime || "")
+  const [status, setStatus] = useState(b.status)
+  const [notes, setNotes] = useState(b.privateNotes || "")
+  const [region, setRegion] = useState(b.region)
+
+  const endTime = pickTime && startTime ? computeEndTime(startTime, b.durationHours) : b.endTime
+  const workingDays = isBuild ? Math.max(1, countWeekdays(start, end)) : 1
+  const hoursPerDay = Math.round((b.durationHours / workingDays) * 10) / 10
+
+  // Moving the start date shifts the whole window, preserving its length.
+  const onStartChange = (iso) => {
+    if (!iso) return
+    if (isBuild) {
+      const delta = dayDiff(parseISO(iso), parseISO(start))
+      setEnd(fmtISO(addDays(parseISO(end), delta)))
+      setStart(iso)
+    } else {
+      setStart(iso); setEnd(iso)
+    }
+  }
+
+  const save = () => {
+    onSave({
+      title, start, end, status, privateNotes: notes, region,
+      ...(pickTime ? { startTime, endTime } : {}),
+    })
+    onClose()
+  }
+
   return (
     <div className="sched-overlay" onClick={onClose}>
-      <div className="sched-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="sched-modal alloc" onClick={(e) => e.stopPropagation()}>
         <div className="sched-modal-head">
           <div>
-            <h3>{b.title || b.operationLabel}</h3>
-            <span className={`pill ${b.status}`}>{b.status}</span>
+            <h3>{b.operationLabel}</h3>
+            <span className={`pill ${status}`}>{status}</span>
           </div>
           <button className="sched-x" aria-label="Close" onClick={onClose}>×</button>
         </div>
 
         <div className="sched-modal-body">
-          <dl>
-            <dt>Operation</dt><dd>{b.operationLabel}{b.tier ? ` (${b.tier === "lower" ? "lower-tier" : "PROD/large"})` : ""}</dd>
-            <dt>Region</dt><dd>{b.region || "Unassigned"}</dd>
-            <dt>CID</dt><dd>{b.cid || "—"}</dd>
-            <dt>Environment</dt><dd>{b.environment || "—"}</dd>
-            {isBuild ? (
-              <>
-                <dt>Build window</dt><dd>{b.start} → {b.end}</dd>
-              </>
-            ) : (
-              <>
-                <dt>Date</dt><dd>{b.start}</dd>
-                <dt>Time</dt><dd>{b.startTime} – {b.endTime}</dd>
-              </>
-            )}
-            <dt>Duration</dt><dd>{b.durationHours}h</dd>
-            <dt>Booked by</dt><dd>{b.bookerName || b.csmEmail || "—"}</dd>
-          </dl>
+          <div className="alloc-summary">
+            <div className="alloc-stats">
+              <div className="stat">
+                <span className="stat-label">Hours</span>
+                <span className="stat-big">{hoursPerDay}<small>h/day</small></span>
+              </div>
+              <div className="stat">
+                <span className="stat-label">Total hours</span>
+                <span className="stat-big">{b.durationHours}</span>
+              </div>
+              <div className="stat grow">
+                <span className="stat-label">
+                  Duration: {workingDays} working day{workingDays === 1 ? "" : "s"}
+                </span>
+                <div className="date-range">
+                  <input type="date" value={start} onChange={(e) => onStartChange(e.target.value)} />
+                  {isBuild && (
+                    <>
+                      <span className="chev">›</span>
+                      <input type="date" value={end} readOnly />
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
 
-          <div className="sched-edit">
-            <label>{isBuild ? "Move build start date" : "Move date"}</label>
-            <input type="date" value={b.start} onChange={(e) => e.target.value && onMove(e.target.value)} />
-
-            {!isBuild && (
-              <>
-                <label>Start time</label>
-                <select value={SLOTS.includes(b.startTime) ? b.startTime : ""} onChange={(e) => onTime(e.target.value)}>
-                  {!SLOTS.includes(b.startTime) && <option value="">{b.startTime}</option>}
+            {pickTime && (
+              <div className="alloc-time">
+                <span className="stat-label">Start time</span>
+                <select value={SLOTS.includes(startTime) ? startTime : ""} onChange={(e) => setStartTime(e.target.value)}>
+                  {!SLOTS.includes(startTime) && <option value="">{startTime || "—"}</option>}
                   {SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
-              </>
+                <span className="muted">– {endTime}</span>
+              </div>
             )}
           </div>
+
+          <div className="alloc-field">
+            <label>Project</label>
+            <div className="alloc-box ro">{[b.cid, b.environment].filter(Boolean).join(" / ") || "—"}</div>
+          </div>
+
+          <div className="alloc-field">
+            <label>Task</label>
+            <input className="alloc-box" value={title} onChange={(e) => setTitle(e.target.value)} />
+          </div>
+
+          <div className="alloc-field">
+            <label>Status</label>
+            <div className="alloc-pills">
+              <button type="button" className={status === "pending" ? "on" : ""} onClick={() => setStatus("pending")}>Pending</button>
+              <button type="button" className={status === "approved" ? "on" : ""} onClick={() => setStatus("approved")}>Approved</button>
+            </div>
+          </div>
+
+          <div className="alloc-field">
+            <label>Notes</label>
+            <textarea
+              className="alloc-box"
+              placeholder="Add details specific to this booking"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+
+          <div className="alloc-field">
+            <label>Assigned to</label>
+            <div className="alloc-box chips">
+              {region
+                ? <span className="chip">{region} <button type="button" aria-label="Unassign" onClick={() => setRegion(null)}>×</button></span>
+                : <span className="muted">Unassigned</span>}
+            </div>
+          </div>
+
+          {b.bookerName && <div className="alloc-meta">Booked by {b.bookerName}</div>}
         </div>
 
-        <div className="sched-actions">
-          {b.status === "cancelled"
-            ? <button className="btn-restore" onClick={onRestore}>Restore</button>
-            : <button className="btn-cancel" onClick={onCancel}>Cancel booking</button>}
-          <button className="btn-done" onClick={onClose}>Done</button>
+        <div className="alloc-buttons">
+          <button className="btn-update" onClick={save}>Update</button>
+          <button className="btn-light" onClick={onClose}>Cancel</button>
+          <span className="spacer" />
+          {status === "cancelled"
+            ? <button className="btn-link ok" onClick={() => { onRestore(); onClose() }}>Restore booking</button>
+            : <button className="btn-link danger" onClick={() => { onCancelBooking(); onClose() }}>Cancel booking</button>}
         </div>
       </div>
     </div>
