@@ -15,7 +15,6 @@ export default function Root() {
       </header>
 
       <main className="content">
-        {/* The orange bar is now the page switcher */}
         <div className="service-card service-tabs">
           <button
             className={"service-tab" + (tab === "book" ? " active" : "")}
