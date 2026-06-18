@@ -1,26 +1,4 @@
-// ---------------------------------------------------------------------------
-// SHARED BOOKINGS STORE
-// One record shape, read by both surfaces: the booking form (create) and the
-// Schedule page (view / cancel / move). Today this is mock data held in memory;
-// swap SEED_BOOKINGS for a fetch from the OCU-style flow / SharePoint list when
-// the backend store exists. Both surfaces should point at the same store.
-//
-// Record shape:
-//   id            stable unique id (needed for update/cancel/move)
-//   status        "approved" | "pending" | "cancelled"
-//   region        grouping row on the Schedule (placeholder for now — the
-//                 staff/assignment dimension is still an open decision)
-//   operationType "build" | "refresh" | "cutover"
-//   operationLabel display label
-//   title         free-text title shown on the bar
-//   cid, environment, environmentId
-//   start, end    ISO YYYY-MM-DD. Builds span multiple days (start..end);
-//                 refresh/cutover are single-day (start === end).
-//   startTime, endTime   refresh/cutover only
-//   durationHours staff-hours the booking consumes
-//   tier          refresh only
-//   bookerName, csmEmail, utilityBox, privateNotes
-// ---------------------------------------------------------------------------
+// this is mock data stored for the calendar page
 
 export const REGIONS = ["CLD-CTC", "CLD-EMEA", "CLD-HQ"]
 
