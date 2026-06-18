@@ -36,7 +36,7 @@ function dayCapacityReached(/* day */) {
   return false
 }
 
-const SLOTS = ["8:30 AM", "10:00 AM", "11:30 AM", "1:00 PM"]
+const SLOTS = ["8:30 AM", "9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:30 AM", "12:00 PM", "12:30 PM", "1:00 PM"]
 const DOW = ["S", "M", "T", "W", "T", "F", "S"]
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -118,8 +118,7 @@ function addDays(d, n) {
 function isWeekend(d) {
   const x = d.getDay(); return x === 0 || x === 6
 }
-// TZ-safe local YYYY-MM-DD (avoids the UTC day-shift; also cleaner for the
-// timezone work coming later).
+// TZ-safe local YYYY-MM-DD: avoids the UTC day-shift
 function fmtISO(d) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, "0")
@@ -270,7 +269,6 @@ function App() {
     <div className="page">
       <header className="brand-header">
         <img src={strategyLogo} className="logo-img" alt="Strategy" />
-        <h1 className="brand-title">Strategy</h1>
       </header>
 
       <main className="content">
