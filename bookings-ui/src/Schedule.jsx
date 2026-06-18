@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import './Schedule.css'
-import { REGIONS, SEED_BOOKINGS } from './bookings'
+import { REGIONS, SEED_BOOKINGS, REGION_BUILD_CAPACITY } from './bookings'
 
 const NUM_DAYS = 14
 const LANE_H = 58
@@ -53,6 +53,17 @@ function assignLanes(items) {
   })
 }
 
+// Most builds running on the same day within the visible window — i.e. peak lanes used.
+function peakConcurrentBuilds(builds, days) {
+  let peak = 0
+  for (const d of days) {
+    let c = 0
+    for (const b of builds) if (parseISO(b.start) <= d && d <= parseISO(b.end)) c++
+    if (c > peak) peak = c
+  }
+  return peak
+}
+
 const SLOTS = ["8:30 AM", "10:00 AM", "11:30 AM", "1:00 PM"]
 
 export default function Schedule() {
@@ -86,7 +97,7 @@ export default function Schedule() {
   return (
     <div className="sched">
       <div className="sched-toolbar">
-        <h2>Parallel Build Calendar</h2>
+        <h2>Parallel build schedule</h2>
         <div className="spacer" />
         <span className="sched-range">{fmtRange(viewStart)}</span>
         <button className="sched-nav" aria-label="Previous two weeks" onClick={() => setViewStart(addDays(viewStart, -7))}>‹</button>
@@ -98,7 +109,7 @@ export default function Schedule() {
         <span><i className="lg-build" />Build</span>
         <span><i className="lg-refresh" />MD Refresh</span>
         <span><i className="lg-cutover" />Cutover</span>
-        <span style={{ marginLeft: "auto" }}>Solid = Booked · Dashed = pending · faded = cancelled</span>
+        <span style={{ marginLeft: "auto" }}>Dashed = pending · faded = cancelled</span>
       </div>
 
       <div className="sched-scroll">
@@ -123,6 +134,12 @@ export default function Schedule() {
               .filter((b) => b.status !== "cancelled")
               .reduce((sum, b) => sum + (b.durationHours || 0), 0)
 
+            const limit = region != null ? REGION_BUILD_CAPACITY[region] : undefined
+            const peakBuilds = limit != null
+              ? peakConcurrentBuilds(items.filter((b) => b.operationType === "build" && b.status !== "cancelled"), days)
+              : 0
+            const capState = limit == null ? "" : peakBuilds > limit ? "over" : peakBuilds === limit ? "full" : ""
+
             return (
               <div className="sched-row-wrap" key={regionKey} style={{ display: "contents" }}>
                 <div className="sched-rowlabel">
@@ -130,7 +147,14 @@ export default function Schedule() {
                     <div className="rl-name">{region || "Unassigned"}</div>
                     <div className="rl-sub">{region ? "Cloud Operations" : "Region TBD"}</div>
                   </div>
-                  <div className="rl-hours">{weekHours}h</div>
+                  <div className="rl-cap">
+                    {limit != null && (
+                      <div className={"rl-builds " + capState} title="Peak concurrent builds in view / capacity">
+                        {peakBuilds}/{limit} builds
+                      </div>
+                    )}
+                    <div className="rl-hours">{weekHours}h</div>
+                  </div>
                 </div>
 
                 <div className="sched-track" style={{ minHeight: trackH }}>
