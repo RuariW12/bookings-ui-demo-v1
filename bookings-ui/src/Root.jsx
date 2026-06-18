@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import App from './App'          // booking form (now just the fields)
+import App from './App'          // booking form 
 import Schedule from './Schedule'
 import strategyLogo from './assets/strategy.jpg'
 import './App.css'
