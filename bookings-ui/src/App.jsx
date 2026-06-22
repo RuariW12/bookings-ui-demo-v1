@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './App.css'
+import { REGIONS, REGION_TZ, REGION_SLOTS, SEED_BOOKINGS } from './bookings'
 
 const OPERATION_TYPES = {
   build: {
@@ -22,18 +23,11 @@ const OPERATION_TYPES = {
     anchor: "day",
     pickTime: true,
     hours: 2,
-    leadDays: 7,            // min 1 week, but...
+    leadDays: 7,            // min 1 week, but
     weekendLeadDays: 14,    // ...2 weeks if the chosen date is a weekend
   },
 }
 
-
-function dayCapacityReached(/* day */) {
-  if (DAILY_CAPACITY_HOURS == null) return false   // unknown → never block (stub)
-  return false
-}
-
-const SLOTS = ["8:30 AM", "10:00 AM", "11:30 AM", "1:00 PM"]
 const DOW = ["S", "M", "T", "W", "T", "F", "S"]
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -107,6 +101,21 @@ const CSM_EMAILS = [
   "bbahia@microstrategy.com",
 ]
 
+// --- region helpers --------------------------------------------------------
+const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+// Best-effort region guess from the browser's timezone. This is ONLY a default
+// for the dropdown — it stays visible and editable. Region drives capacity, so
+// we never silently trust the browser: exact IANA match first, then a coarse
+// continent match, else leave blank for the CSM to choose.
+function guessRegion() {
+  const exact = REGIONS.find((r) => REGION_TZ[r] === VIEWER_TZ)
+  if (exact) return exact
+  const cont = VIEWER_TZ.split("/")[0]
+  const byCont = REGIONS.find((r) => (REGION_TZ[r] || "").split("/")[0] === cont)
+  return byCont || ""
+}
+
 // --- date helpers ----------------------------------------------------------
 function startOfToday() {
   const t = new Date(); t.setHours(0, 0, 0, 0); return t
@@ -128,6 +137,20 @@ function fmtISO(d) {
 function fmtShort(d) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
 }
+
+// Slots already taken for a region on a given day.
+// MOCK SEAM: reads the seed bookings. When the backend lands, swap SEED_BOOKINGS
+// for the fetched bookings (SharePoint/SQL) for the chosen region + day — the
+// rest of the logic is unchanged.
+function takenSlots(region, day) {
+  const iso = fmtISO(day)
+  return new Set(
+    SEED_BOOKINGS
+      .filter((b) => b.region === region && b.status !== "cancelled" && b.start === iso && b.startTime)
+      .map((b) => b.startTime)
+  )
+}
+
 // The n business days starting from `startDate` (inclusive), going forward,
 // skipping weekends. The start date is the first build day.
 function businessDaysFrom(startDate, n) {
@@ -172,6 +195,10 @@ function App() {
   const [operationType, setOperationType] = useState("")  // "" | build | refresh | cutover
   const [tier, setTier] = useState("prod_large")           // refresh only: lower | prod_large
 
+  // region — drives capacity, slot list, and the time zone the times are read in.
+  // Defaulted from the browser zone as a guess; always editable.
+  const [region, setRegion] = useState(guessRegion)
+
   // entry (manual — autofill deferred until data is reliable)
   const [entitlement, setEntitlement] = useState("")
   const [cid, setCid] = useState("")
@@ -194,6 +221,11 @@ function App() {
   const buildSpan = operationType === "build" && date ? businessDaysFrom(date, cfg.spanBusinessDays) : []
   const endTime = cfg && cfg.pickTime && time ? computeEndTime(time, hours) : ""
 
+  // Per-region slot availability for the selected day (timed ops only).
+  const regionSlots = region ? (REGION_SLOTS[region] || []) : []
+  const takenSet = region && date && cfg?.pickTime ? takenSlots(region, date) : new Set()
+  const freeSlots = regionSlots.filter((s) => !takenSet.has(s))
+
   const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))
   const nextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))
 
@@ -208,11 +240,16 @@ function App() {
     if (t !== "refresh") setTier("prod_large")
   }
 
+  // Changing region can invalidate the chosen slot (different list / now taken).
+  const onRegionChange = (r) => {
+    setRegion(r)
+    setTime("")
+  }
+
   // Is `day` a valid choice given the selected operation type?
   function isSelectable(day) {
     if (!operationType) return false
     if (day < startOfToday()) return false
-    if (dayCapacityReached(day)) return false           // inert until capacity known
     // Refresh defaults to weekdays only — the doc gives no weekend provision
     // for refresh (only cutover names one). Flip this if confirmed otherwise.
     if (operationType === "refresh" && isWeekend(day)) return false
@@ -222,7 +259,15 @@ function App() {
       if (isWeekend(day)) return false
       return day >= addDays(startOfToday(), cfg.leadDays)
     }
-    return day >= addDays(startOfToday(), leadDaysFor(operationType, day))
+    // timed ops (refresh / cutover): respect lead time...
+    if (day < addDays(startOfToday(), leadDaysFor(operationType, day))) return false
+    // ...then block the day only if the region is known AND every slot is taken.
+    if (region) {
+      const slots = REGION_SLOTS[region] || []
+      const taken = takenSlots(region, day)
+      if (slots.length > 0 && slots.every((s) => taken.has(s))) return false
+    }
+    return true
   }
 
   const inBuildSpan = (day) => buildSpan.some((s) => s.toDateString() === day.toDateString())
@@ -235,6 +280,8 @@ function App() {
       operationLabel: cfg?.label || "",
       tier: operationType === "refresh" ? tier : null,
       durationHours: hours,
+      region,
+      regionTz: REGION_TZ[region] || null,   // explicit so the backend can normalize to the US-East anchor
       entitlement, cid, environment, environmentId,
       // date semantics differ by type. Build is START-anchored: the selected
       // date is the first of 5 business days (delivery per the doc falls on/
@@ -242,7 +289,7 @@ function App() {
       buildWindowStart: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[0]) : null,
       buildWindowEnd: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[buildSpan.length - 1]) : null,
       date: operationType !== "build" && date ? fmtISO(date) : null,
-      startTime: cfg?.pickTime ? time : null,
+      startTime: cfg?.pickTime ? time : null,   // region-local wall time
       endTime: endTime || null,
       bookerName, csmEmail, utilityBox, privateNotes,
     }
@@ -263,7 +310,7 @@ function App() {
     }
   }
 
-  const canBook = !!operationType && !!date && (!cfg.pickTime || !!time)
+  const canBook = !!operationType && !!region && !!date && (!cfg.pickTime || !!time)
 
   return (
     <>
@@ -286,6 +333,19 @@ function App() {
             </select>
           </div>
         )}
+
+        <div className="field">
+          <label>Region</label>
+          <select value={region} onChange={(e) => onRegionChange(e.target.value)}>
+            <option value="">-- select a region --</option>
+            {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          {region && (
+            <div className="tz" style={{ marginTop: 4 }}>
+              Capacity &amp; start times follow {region} ({REGION_TZ[region]})
+            </div>
+          )}
+        </div>
 
         {cfg && (
           <div className="warning-box" style={{ background: "#eef4ff", borderColor: "#9db8e8" }}>
@@ -368,18 +428,29 @@ function App() {
                   <div>{buildSpan.length ? `${fmtShort(buildSpan[0])} – ${fmtShort(buildSpan[buildSpan.length - 1])}` : ""}</div>
                   <div style={{ marginTop: 6, fontSize: "0.85em" }}>5 business days · starts {fmtShort(date)}</div>
                 </div>
+              ) : !region ? (
+                <div className="cal-hint">Select a region to see start times.</div>
               ) : (
                 <>
-                  {SLOTS.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      className={"slot" + (time === t ? " selected" : "")}
-                      onClick={() => setTime(t)}
-                    >
-                      {t}
-                    </button>
-                  ))}
+                  <div className="cal-hint" style={{ marginBottom: 8 }}>
+                    <strong>{freeSlots.length}</strong> of {regionSlots.length} slots free on {fmtShort(date)}
+                  </div>
+                  {regionSlots.map((t) => {
+                    const taken = takenSet.has(t)
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        disabled={taken}
+                        title={taken ? "Already booked for this region / day" : undefined}
+                        className={"slot" + (time === t ? " selected" : "") + (taken ? " taken" : "")}
+                        onClick={() => setTime(t)}
+                      >
+                        {t}{taken ? " · booked" : ""}
+                      </button>
+                    )
+                  })}
+                  {regionSlots.length === 0 && <div className="cal-hint">No slots configured for {region}.</div>}
                   {time && (
                     <div className="cal-hint" style={{ marginTop: 8 }}>
                       {hours}h · {time} – {endTime}
@@ -390,7 +461,11 @@ function App() {
             </div>
           </div>
 
-          <div className="tz">All times are in (UTC−05:00) Eastern Time (US &amp; Canada)</div>
+          <div className="tz">
+            {region
+              ? `Times shown in ${REGION_TZ[region]} — the ${region} region's local time`
+              : "Select a region to set the time zone"}
+          </div>
         </div>
 
         <h3 className="section-head">Your details</h3>
