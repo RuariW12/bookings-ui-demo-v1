@@ -42,8 +42,10 @@ function computeEndTime(startLabel, hours) {
   return `${((eh + 11) % 12) + 1}:${String(em).padStart(2, "0")} ${eh >= 12 ? "PM" : "AM"}`
 }
 
+// --- timezone helpers ------------------------------------------------------
 const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
 
+// Real offset (ms) for a zone at a given instant — DST-correct, no hardcoded numbers.
 function tzOffset(tz, date) {
   const dtf = new Intl.DateTimeFormat("en-US", {
     timeZone: tz, hour12: false,
@@ -54,6 +56,7 @@ function tzOffset(tz, date) {
   return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - date.getTime()
 }
 
+// Region-local wall time ("2026-06-23", "10:00 AM", tz) → real instant.
 function wallToInstant(dateISO, timeLabel, tz) {
   const m = timeLabel?.match(/(\d+):(\d+)\s*(AM|PM)/i)
   if (!m || !dateISO || !tz) return null
@@ -64,6 +67,7 @@ function wallToInstant(dateISO, timeLabel, tz) {
   return new Date(guess - tzOffset(tz, new Date(guess)))
 }
 
+// Region-local "today" as an ISO date string.
 function todayInZone(tz) {
   const p = Object.fromEntries(
     new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
@@ -72,6 +76,7 @@ function todayInZone(tz) {
   return `${p.year}-${p.month}-${p.day}`
 }
 
+// Render an instant as a wall-clock time in a given zone.
 function timeInZone(instant, tz) {
   return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(instant)
 }
@@ -97,7 +102,6 @@ function peakConcurrentBuilds(builds, days) {
   }
   return peak
 }
-
 
 export default function Schedule() {
   const [bookings, setBookings] = useState(SEED_BOOKINGS)
@@ -194,7 +198,7 @@ export default function Schedule() {
                 <div className="sched-track" style={{ minHeight: trackH }}>
                   <div className="sched-track-bg">
                     {days.map((d, i) => (
-                      <div key={i} className={"sched-bgcell" + (isWeekend(d) ? " weekend" : "") + (sameDay(d, today) ? " today" : "")} />
+                      <div key={i} className={"sched-bgcell" + (isWeekend(d) ? " weekend" : "") + (fmtISO(d) === regionTodayISO ? " today" : "")} />
                     ))}
                   </div>
 
@@ -261,6 +265,11 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
   const workingDays = isBuild ? Math.max(1, countWeekdays(start, end)) : 1
   const hoursPerDay = Math.round((b.durationHours / workingDays) * 10) / 10
 
+  // Region drives both the slot list and the timezone the times are read in.
+  const slots = region ? (REGION_SLOTS[region] || []) : []
+  const startInstant = pickTime && startTime && region ? wallToInstant(start, startTime, REGION_TZ[region]) : null
+  const localHint = startInstant && REGION_TZ[region] !== VIEWER_TZ ? timeInZone(startInstant, VIEWER_TZ) : null
+
   // Moving the start date shifts the whole window, preserving its length.
   const onStartChange = (iso) => {
     if (!iso) return
@@ -321,12 +330,15 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
 
             {pickTime && (
               <div className="alloc-time">
-                <span className="stat-label">Start time</span>
-                <select value={SLOTS.includes(startTime) ? startTime : ""} onChange={(e) => setStartTime(e.target.value)}>
-                  {!SLOTS.includes(startTime) && <option value="">{startTime || "—"}</option>}
-                  {SLOTS.map((t) => <option key={t} value={t}>{t}</option>)}
+                <span className="stat-label">
+                  Start time <small className="muted">({region ? REGION_TZ[region] : "select region"} local)</small>
+                </span>
+                <select value={slots.includes(startTime) ? startTime : ""} onChange={(e) => setStartTime(e.target.value)}>
+                  {!slots.includes(startTime) && <option value="">{startTime || "—"}</option>}
+                  {slots.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <span className="muted">– {endTime}</span>
+                {localHint && <div className="tz-hint muted">{startTime} = {localHint} your time ({VIEWER_TZ})</div>}
               </div>
             )}
           </div>
@@ -360,12 +372,11 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
           </div>
 
           <div className="alloc-field">
-            <label>Assigned to</label>
-            <div className="alloc-box chips">
-              {region
-                ? <span className="chip">{region} <button type="button" aria-label="Unassign" onClick={() => setRegion(null)}>×</button></span>
-                : <span className="muted">Unassigned</span>}
-            </div>
+            <label>Region</label>
+            <select className="alloc-box" value={region || ""} onChange={(e) => setRegion(e.target.value || null)}>
+              <option value="">Unassigned</option>
+              {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
           </div>
 
           {b.bookerName && <div className="alloc-meta">Booked by {b.bookerName}</div>}
