@@ -142,8 +142,6 @@ export const SEED_BOOKINGS = [
     bookerName: "T. Miekisz",
     csmEmail: "tmiekisz@microstrategy.com",
   },
-  // Two overlapping CTC builds — demo data so CTC reaches its 2-build limit.
-  // (Remove these if you don't want CTC showing as full.)
   {
     id: "pb-0009",
     status: "approved",
@@ -204,7 +202,7 @@ export function fromFormPayload(p, id) {
 }
 
 export const REGION_TZ = {
-  "CLD-CTC":  "Asia/Shanghai",    // ← confirm: what zone is CTC actually operated from?
+  "CLD-CTC":  "Asia/Shanghai",
   "CLD-EMEA": "Europe/London",
   "CLD-HQ":   "America/New_York",
 }
