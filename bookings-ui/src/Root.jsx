@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import App from './App'          // booking form 
-import Schedule from './Schedule'
+import Schedule from './Schedule' // Scheduling calendar
 import strategyLogo from './assets/strategy.jpg'
 import './App.css'
 
@@ -11,7 +11,7 @@ export default function Root() {
     <div className={"page" + (tab === "schedule" ? " page--wide" : "")}>
       <header className="brand-header">
         <img src={strategyLogo} className="logo-img" alt="Strategy" />
-        <h1 className="brand-title">Strategy</h1>
+        <h1 className="brand-title">Parallel Build Bookings Tool</h1>
       </header>
 
       <main className="content">

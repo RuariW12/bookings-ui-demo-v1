@@ -202,3 +202,16 @@ export function fromFormPayload(p, id) {
     privateNotes: p.privateNotes,
   }
 }
+
+export const REGION_TZ = {
+  "CLD-CTC":  "Asia/Shanghai",    // ← confirm: what zone is CTC actually operated from?
+  "CLD-EMEA": "Europe/London",
+  "CLD-HQ":   "America/New_York",
+}
+
+// Region-local wall-clock slots — vary the count per region freely.
+export const REGION_SLOTS = {
+  "CLD-CTC":  ["9:00 AM", "10:30 AM", "1:00 PM"],                       // 3/day
+  "CLD-EMEA": ["8:30 AM", "10:00 AM", "11:30 AM", "1:00 PM", "2:30 PM"],// 5/day
+  "CLD-HQ":   ["8:30 AM", "10:00 AM", "11:30 AM", "1:00 PM"],           // 4/day
+}
