@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import './Schedule.css'
-import { REGIONS, SEED_BOOKINGS, REGION_BUILD_CAPACITY } from './bookings'
+import { REGIONS, SEED_BOOKINGS, REGION_BUILD_CAPACITY, REGION_TZ, REGION_SLOTS } from './bookings'
 
 const NUM_DAYS = 14
 const LANE_H = 58
@@ -64,7 +64,6 @@ function peakConcurrentBuilds(builds, days) {
   return peak
 }
 
-const SLOTS = ["8:30 AM", "10:00 AM", "11:30 AM", "1:00 PM"]
 
 export default function Schedule() {
   const [bookings, setBookings] = useState(SEED_BOOKINGS)
