@@ -42,6 +42,40 @@ function computeEndTime(startLabel, hours) {
   return `${((eh + 11) % 12) + 1}:${String(em).padStart(2, "0")} ${eh >= 12 ? "PM" : "AM"}`
 }
 
+const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+function tzOffset(tz, date) {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  })
+  const p = Object.fromEntries(dtf.formatToParts(date).map(({ type, value }) => [type, value]))
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - date.getTime()
+}
+
+function wallToInstant(dateISO, timeLabel, tz) {
+  const m = timeLabel?.match(/(\d+):(\d+)\s*(AM|PM)/i)
+  if (!m || !dateISO || !tz) return null
+  let h = parseInt(m[1], 10) % 12
+  if (/PM/i.test(m[3])) h += 12
+  const [y, mo, d] = dateISO.split("-").map(Number)
+  const guess = Date.UTC(y, mo - 1, d, h, parseInt(m[2], 10))
+  return new Date(guess - tzOffset(tz, new Date(guess)))
+}
+
+function todayInZone(tz) {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(new Date()).map(({ type, value }) => [type, value])
+  )
+  return `${p.year}-${p.month}-${p.day}`
+}
+
+function timeInZone(instant, tz) {
+  return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(instant)
+}
+
 // Greedy lane assignment so overlapping bookings in a region stack instead of collide.
 function assignLanes(items) {
   const laneEnds = []
