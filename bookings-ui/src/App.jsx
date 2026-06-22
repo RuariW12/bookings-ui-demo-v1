@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import './App.css'
-import { REGIONS, REGION_TZ, REGION_SLOTS, SEED_BOOKINGS } from './bookings'
+import { REGIONS, REGION_SLOTS, SEED_BOOKINGS } from './bookings'
 
 const OPERATION_TYPES = {
   build: {
@@ -124,6 +124,9 @@ function fmtShort(d) {
 }
 
 // Slots already taken for a region on a given day.
+// MOCK SEAM: reads the seed bookings. When the backend lands, swap SEED_BOOKINGS
+// for the fetched bookings (SharePoint/SQL) for the chosen region + day — the
+// rest of the logic is unchanged.
 function takenSlots(region, day) {
   const iso = fmtISO(day)
   return new Set(
@@ -263,7 +266,6 @@ function App() {
       tier: operationType === "refresh" ? tier : null,
       durationHours: hours,
       region,
-      regionTz: REGION_TZ[region] || null,   // explicit so the backend can normalize to the US-East anchor
       entitlement, cid, environment, environmentId,
       // date semantics differ by type. Build is START-anchored: the selected
       // date is the first of 5 business days (delivery per the doc falls on/
@@ -271,7 +273,7 @@ function App() {
       buildWindowStart: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[0]) : null,
       buildWindowEnd: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[buildSpan.length - 1]) : null,
       date: operationType !== "build" && date ? fmtISO(date) : null,
-      startTime: cfg?.pickTime ? time : null,   // region-local wall time
+      startTime: cfg?.pickTime ? time : null,   // US Eastern — the single anchor for all bookings
       endTime: endTime || null,
       bookerName, csmEmail, utilityBox, privateNotes,
     }
@@ -324,7 +326,7 @@ function App() {
           </select>
           {region && (
             <div className="tz" style={{ marginTop: 4 }}>
-              Capacity &amp; start times follow {region} ({REGION_TZ[region]})
+              Capacity &amp; available slots for {region}
             </div>
           )}
         </div>
@@ -443,11 +445,7 @@ function App() {
             </div>
           </div>
 
-          <div className="tz">
-            {region
-              ? `Times shown in ${REGION_TZ[region]} — the ${region} region's local time`
-              : "Select a region to set the time zone"}
-          </div>
+          <div className="tz">All times are in (UTC−05:00) Eastern Time (US &amp; Canada)</div>
         </div>
 
         <h3 className="section-head">Your details</h3>
