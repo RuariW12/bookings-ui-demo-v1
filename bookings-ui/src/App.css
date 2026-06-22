@@ -298,3 +298,13 @@ body {
   font-size: 13px;
   color: #594b00;
 }
+
+.field > .tz {
+  font-size: 0.8em;
+  color: #6b7280;
+}
+
+.cal-day:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

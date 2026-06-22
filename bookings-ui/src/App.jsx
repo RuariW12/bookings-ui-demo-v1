@@ -101,21 +101,6 @@ const CSM_EMAILS = [
   "bbahia@microstrategy.com",
 ]
 
-// --- region helpers --------------------------------------------------------
-const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-// Best-effort region guess from the browser's timezone. This is ONLY a default
-// for the dropdown — it stays visible and editable. Region drives capacity, so
-// we never silently trust the browser: exact IANA match first, then a coarse
-// continent match, else leave blank for the CSM to choose.
-function guessRegion() {
-  const exact = REGIONS.find((r) => REGION_TZ[r] === VIEWER_TZ)
-  if (exact) return exact
-  const cont = VIEWER_TZ.split("/")[0]
-  const byCont = REGIONS.find((r) => (REGION_TZ[r] || "").split("/")[0] === cont)
-  return byCont || ""
-}
-
 // --- date helpers ----------------------------------------------------------
 function startOfToday() {
   const t = new Date(); t.setHours(0, 0, 0, 0); return t
@@ -139,9 +124,6 @@ function fmtShort(d) {
 }
 
 // Slots already taken for a region on a given day.
-// MOCK SEAM: reads the seed bookings. When the backend lands, swap SEED_BOOKINGS
-// for the fetched bookings (SharePoint/SQL) for the chosen region + day — the
-// rest of the logic is unchanged.
 function takenSlots(region, day) {
   const iso = fmtISO(day)
   return new Set(
@@ -196,8 +178,8 @@ function App() {
   const [tier, setTier] = useState("prod_large")           // refresh only: lower | prod_large
 
   // region — drives capacity, slot list, and the time zone the times are read in.
-  // Defaulted from the browser zone as a guess; always editable.
-  const [region, setRegion] = useState(guessRegion)
+  // Chosen explicitly by the CSM.
+  const [region, setRegion] = useState("")
 
   // entry (manual — autofill deferred until data is reliable)
   const [entitlement, setEntitlement] = useState("")
