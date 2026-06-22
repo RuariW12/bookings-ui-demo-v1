@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import './Schedule.css'
-import { REGIONS, SEED_BOOKINGS, REGION_BUILD_CAPACITY, REGION_TZ, REGION_SLOTS } from './bookings'
+import { REGIONS, SEED_BOOKINGS, REGION_BUILD_CAPACITY, REGION_SLOTS } from './bookings'
 
 const NUM_DAYS = 14
 const LANE_H = 58
@@ -40,45 +40,6 @@ function computeEndTime(startLabel, hours) {
   const t = h * 60 + parseInt(m[2], 10) + hours * 60
   const eh = Math.floor(t / 60), em = t % 60
   return `${((eh + 11) % 12) + 1}:${String(em).padStart(2, "0")} ${eh >= 12 ? "PM" : "AM"}`
-}
-
-// --- timezone helpers ------------------------------------------------------
-const VIEWER_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone
-
-// Real offset (ms) for a zone at a given instant — DST-correct, no hardcoded numbers.
-function tzOffset(tz, date) {
-  const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz, hour12: false,
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  })
-  const p = Object.fromEntries(dtf.formatToParts(date).map(({ type, value }) => [type, value]))
-  return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - date.getTime()
-}
-
-// Region-local wall time ("2026-06-23", "10:00 AM", tz) → real instant.
-function wallToInstant(dateISO, timeLabel, tz) {
-  const m = timeLabel?.match(/(\d+):(\d+)\s*(AM|PM)/i)
-  if (!m || !dateISO || !tz) return null
-  let h = parseInt(m[1], 10) % 12
-  if (/PM/i.test(m[3])) h += 12
-  const [y, mo, d] = dateISO.split("-").map(Number)
-  const guess = Date.UTC(y, mo - 1, d, h, parseInt(m[2], 10))
-  return new Date(guess - tzOffset(tz, new Date(guess)))
-}
-
-// Region-local "today" as an ISO date string.
-function todayInZone(tz) {
-  const p = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
-      .formatToParts(new Date()).map(({ type, value }) => [type, value])
-  )
-  return `${p.year}-${p.month}-${p.day}`
-}
-
-// Render an instant as a wall-clock time in a given zone.
-function timeInZone(instant, tz) {
-  return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(instant)
 }
 
 // Greedy lane assignment so overlapping bookings in a region stack instead of collide.
@@ -163,7 +124,6 @@ export default function Schedule() {
           {/* region rows */}
           {rows.map((regionKey) => {
             const region = regionKey === "__none" ? null : regionKey
-            const regionTodayISO = region ? todayInZone(REGION_TZ[region]) : fmtISO(today)
             const items = bookings.filter((b) => b.region === region)
             const laid = assignLanes([...items].sort((a, b) => parseISO(a.start) - parseISO(b.start)))
             const laneCount = Math.max(1, ...laid.map((it) => it.lane + 1))
@@ -198,7 +158,7 @@ export default function Schedule() {
                 <div className="sched-track" style={{ minHeight: trackH }}>
                   <div className="sched-track-bg">
                     {days.map((d, i) => (
-                      <div key={i} className={"sched-bgcell" + (isWeekend(d) ? " weekend" : "") + (fmtISO(d) === regionTodayISO ? " today" : "")} />
+                      <div key={i} className={"sched-bgcell" + (isWeekend(d) ? " weekend" : "") + (sameDay(d, today) ? " today" : "")} />
                     ))}
                   </div>
 
@@ -265,10 +225,8 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
   const workingDays = isBuild ? Math.max(1, countWeekdays(start, end)) : 1
   const hoursPerDay = Math.round((b.durationHours / workingDays) * 10) / 10
 
-  // Region drives both the slot list and the timezone the times are read in.
+  // Region selects which slot list applies; times are US Eastern.
   const slots = region ? (REGION_SLOTS[region] || []) : []
-  const startInstant = pickTime && startTime && region ? wallToInstant(start, startTime, REGION_TZ[region]) : null
-  const localHint = startInstant && REGION_TZ[region] !== VIEWER_TZ ? timeInZone(startInstant, VIEWER_TZ) : null
 
   // Moving the start date shifts the whole window, preserving its length.
   const onStartChange = (iso) => {
@@ -331,14 +289,13 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
             {pickTime && (
               <div className="alloc-time">
                 <span className="stat-label">
-                  Start time <small className="muted">({region ? REGION_TZ[region] : "select region"} local)</small>
+                  Start time <small className="muted">(US Eastern)</small>
                 </span>
                 <select value={slots.includes(startTime) ? startTime : ""} onChange={(e) => setStartTime(e.target.value)}>
                   {!slots.includes(startTime) && <option value="">{startTime || "—"}</option>}
                   {slots.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <span className="muted">– {endTime}</span>
-                {localHint && <div className="tz-hint muted">{startTime} = {localHint} your time ({VIEWER_TZ})</div>}
               </div>
             )}
           </div>
