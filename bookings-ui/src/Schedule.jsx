@@ -38,8 +38,10 @@ function computeEndTime(startLabel, hours) {
   let h = parseInt(m[1], 10) % 12
   if (/PM/i.test(m[3])) h += 12
   const t = h * 60 + parseInt(m[2], 10) + hours * 60
-  const eh = Math.floor(t / 60), em = t % 60
-  return `${((eh + 11) % 12) + 1}:${String(em).padStart(2, "0")} ${eh >= 12 ? "PM" : "AM"}`
+  const totalH = Math.floor(t / 60)
+  const eh = totalH % 24, em = t % 60       // wrap past midnight
+  const nextDay = totalH >= 24
+  return `${((eh + 11) % 12) + 1}:${String(em).padStart(2, "0")} ${eh >= 12 ? "PM" : "AM"}${nextDay ? " (+1d)" : ""}`
 }
 
 // Greedy lane assignment so overlapping bookings in a region stack instead of collide.

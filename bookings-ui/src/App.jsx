@@ -169,10 +169,12 @@ function computeEndTime(startLabel, hours) {
   if (/PM/i.test(m[3])) h += 12
   const start = h * 60 + parseInt(m[2], 10)
   const end = start + hours * 60
-  const eh = Math.floor(end / 60), em = end % 60
+  const totalH = Math.floor(end / 60)
+  const eh = totalH % 24, em = end % 60     // wrap past midnight
+  const nextDay = totalH >= 24
   const ampm = eh >= 12 ? "PM" : "AM"
   const dispH = ((eh + 11) % 12) + 1
-  return `${dispH}:${String(em).padStart(2, "0")} ${ampm}`
+  return `${dispH}:${String(em).padStart(2, "0")} ${ampm}${nextDay ? " (+1d)" : ""}`
 }
 
 function App() {
