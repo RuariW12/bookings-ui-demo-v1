@@ -123,10 +123,6 @@ function fmtShort(d) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
 }
 
-// Slots already taken for a region on a given day.
-// MOCK SEAM: reads the seed bookings. When the backend lands, swap SEED_BOOKINGS
-// for the fetched bookings (SharePoint/SQL) for the chosen region + day — the
-// rest of the logic is unchanged.
 function takenSlots(region, day) {
   const iso = fmtISO(day)
   return new Set(
@@ -238,7 +234,7 @@ function App() {
     if (!operationType) return false
     if (day < startOfToday()) return false
     // Refresh defaults to weekdays only — the doc gives no weekend provision
-    // for refresh (only cutover names one). Flip this if confirmed otherwise.
+    // for refresh (only cutover names one). 
     if (operationType === "refresh" && isWeekend(day)) return false
     if (operationType === "build") {
       // Build starts on the selected day and runs 5 business days forward, so
@@ -246,9 +242,8 @@ function App() {
       if (isWeekend(day)) return false
       return day >= addDays(startOfToday(), cfg.leadDays)
     }
-    // timed ops (refresh / cutover): respect lead time...
+    // timed ops (refresh / cutover): respect lead time
     if (day < addDays(startOfToday(), leadDaysFor(operationType, day))) return false
-    // ...then block the day only if the region is known AND every slot is taken.
     if (region) {
       const slots = REGION_SLOTS[region] || []
       const taken = takenSlots(region, day)
