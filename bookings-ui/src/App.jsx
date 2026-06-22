@@ -24,7 +24,7 @@ const OPERATION_TYPES = {
     pickTime: true,
     hours: 2,
     leadDays: 7,            // min 1 week, but
-    weekendLeadDays: 14,    // ...2 weeks if the chosen date is a weekend
+    weekendLeadDays: 14,    // 2 weeks if the chosen date is a weekend
   },
 }
 
