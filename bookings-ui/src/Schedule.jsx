@@ -159,6 +159,7 @@ export default function Schedule() {
           {/* region rows */}
           {rows.map((regionKey) => {
             const region = regionKey === "__none" ? null : regionKey
+            const regionTodayISO = region ? todayInZone(REGION_TZ[region]) : fmtISO(today)
             const items = bookings.filter((b) => b.region === region)
             const laid = assignLanes([...items].sort((a, b) => parseISO(a.start) - parseISO(b.start)))
             const laneCount = Math.max(1, ...laid.map((it) => it.lane + 1))
