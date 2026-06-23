@@ -32,3 +32,10 @@ npm run build    # static build → dist/
 
 `VITE_FLOW_URL` points the booking form at the Power Automate flow. Without it, the form
 just logs the payload to the console.
+
+
+
+# to add
+- login, when logged in it autofills csm address and name
+- approval tab. CSM's can check the request of approval and other managers can approve frmo there. This removes the power automate approval workflow, and centralizes the approval process. Roles will have to be delegated as to approvers and request to approvers. 
+- 3rd status option. pending, request to approve, approved.
