@@ -9,7 +9,7 @@ export default function Root() {
   const [tab, setTab] = useState("book")  // "book" | "schedule" | "approvals"
 
   return (
-    <div className="page">
+    <div className={"page" + (tab === "schedule" ? " page--wide" : "")}>
       <header className="brand-header">
         <img src={strategyLogo} className="logo-img" alt="Strategy" />
         <h1 className="brand-title">Strategy</h1>

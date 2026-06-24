@@ -1,14 +1,5 @@
 // serviceNow.js
 // Mock of the ServiceNow CMDB lookups the booking form needs.
-//
-// The shape mirrors a trimmed SNOW query response. When OAuth provisioning lands,
-// replace the bodies of searchCompanies/getCompany with real fetch() calls — the
-// return shapes stay identical, so App.jsx doesn't change.
-//
-// Real CMDB data is messy: decommissioned environments still show up, and some
-// records are missing a tier. That's intentional here. The form filters to active
-// envs for the dropdown and tolerates a missing tier, so "what you see is what you
-// get" — the CSM picks from what SNOW actually has, with manual entry as fallback.
 
 export const SNOW_COMPANIES = [
   {
