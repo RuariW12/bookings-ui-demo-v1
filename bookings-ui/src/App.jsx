@@ -2,6 +2,7 @@ import { useState } from 'react'
 import './App.css'
 import { REGIONS, SEED_BOOKINGS } from './bookings'
 import { allowedStartTimes } from './operatingHours'
+import { searchCompanies, getCompany, activeEnvironments } from './serviceNow'
 
 const OPERATION_TYPES = {
   build: {
@@ -176,8 +177,7 @@ function computeEndTime(startLabel, hours) {
 
 // Start times available for a timed op in a region, as labels ("9:00 PM").
 // Refresh + cutover are phase-2: they must finish before the region closes,
-// so the window is narrowed by the operation's duration (handled in the module).
-// Builds don't pick a time, so this isn't called for them.
+// so the window is narrowed by the operation's duration. Builds don't pick a time.
 function slotsFor(region, type, durationHours) {
   if (!region || type === "build") return []
   return allowedStartTimes(region, durationHours * 60, true).map((s) => s.label)
@@ -189,14 +189,17 @@ function App() {
   const [tier, setTier] = useState("prod_large")           // refresh only: lower | prod_large
 
   // region — drives capacity, slot list, and the operating window the times sit in.
-  // Chosen explicitly by the CSM.
   const [region, setRegion] = useState("")
 
-  // entry (manual — autofill deferred until data is reliable)
+  // entry — ServiceNow lookup with manual fallback ("what you see is what you get")
   const [entitlement, setEntitlement] = useState("")
   const [cid, setCid] = useState("")
   const [environment, setEnvironment] = useState("")
   const [environmentId, setEnvironmentId] = useState("")
+  const [companyQuery, setCompanyQuery] = useState("")
+  const [companyResults, setCompanyResults] = useState([])
+  const [company, setCompany] = useState(null)       // resolved SNOW company record
+  const [manualEntry, setManualEntry] = useState(false)
 
   // calendar
   const [date, setDate] = useState(null)   // build: delivery date; refresh/cutover: operation date
@@ -214,10 +217,14 @@ function App() {
   const buildSpan = operationType === "build" && date ? businessDaysFrom(date, cfg.spanBusinessDays) : []
   const endTime = cfg && cfg.pickTime && time ? computeEndTime(time, hours) : ""
 
-  // Slots now come from the region's operating hours, narrowed by the op duration.
+  // Slots come from the region's operating hours, narrowed by the op duration.
   const regionSlots = region && cfg?.pickTime ? slotsFor(region, operationType, hours) : []
   const takenSet = region && date && cfg?.pickTime ? takenSlots(region, date) : new Set()
   const freeSlots = regionSlots.filter((s) => !takenSet.has(s))
+
+  const selectedEnv = company && environmentId
+    ? company.environments.find((e) => e.environmentId === environmentId)
+    : null
 
   const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))
   const nextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))
@@ -237,6 +244,33 @@ function App() {
   const onRegionChange = (r) => {
     setRegion(r)
     setTime("")
+  }
+
+  // --- ServiceNow lookup handlers ---
+  const onCompanySearch = async (q) => {
+    setCompanyQuery(q)
+    setCompanyResults(q.trim() ? await searchCompanies(q) : [])
+  }
+
+  const onSelectCompany = async (selCid) => {
+    const c = await getCompany(selCid)
+    setCompany(c)
+    setCid(c?.cid ?? "")
+    setEntitlement(c?.entitlement ?? "")
+    setCompanyQuery(c ? `${c.name} · ${c.cid}` : "")
+    setCompanyResults([])
+    setEnvironment("")
+    setEnvironmentId("")
+    setManualEntry(false)
+  }
+
+  const onSelectEnvironment = (envId) => {
+    const env = company?.environments.find((e) => e.environmentId === envId)
+    if (!env) return
+    setEnvironment(env.environment)
+    setEnvironmentId(env.environmentId)
+    // SNOW knows the tier — adopt it for refresh sizing when it's present.
+    if (env.tier && operationType === "refresh") setTier(env.tier)
   }
 
   // Is `day` a valid choice given the selected operation type?
@@ -273,10 +307,9 @@ function App() {
       tier: operationType === "refresh" ? tier : null,
       durationHours: hours,
       region,
+      companyName: company?.name ?? null,
       entitlement, cid, environment, environmentId,
-      // date semantics differ by type. Build is START-anchored: the selected
-      // date is the first of 5 business days (delivery per the doc falls on/
-      // after the window end and is not captured here).
+      hostRegion: selectedEnv?.hostRegion ?? null,   // from SNOW — seeds the safe-harbour check
       buildWindowStart: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[0]) : null,
       buildWindowEnd: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[buildSpan.length - 1]) : null,
       date: operationType !== "build" && date ? fmtISO(date) : null,
@@ -302,6 +335,8 @@ function App() {
   }
 
   const canBook = !!operationType && !!region && !!date && (!cfg.pickTime || !!time)
+
+  const linkBtn = { background: "none", border: "none", color: "#3a5bbf", cursor: "pointer", padding: 0, fontSize: "0.85em" }
 
   return (
     <>
@@ -349,25 +384,87 @@ function App() {
           </div>
         )}
 
+        {/* --- ServiceNow company lookup --- */}
         <div className="field">
-          <label>Entitlement</label>
-          <input type="text" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} />
+          <label>Company / CID</label>
+          <input
+            type="text"
+            value={companyQuery}
+            placeholder="Search by company name or CID…"
+            onChange={(e) => onCompanySearch(e.target.value)}
+          />
+          {companyResults.length > 0 && (
+            <div style={{ border: "1px solid #cdd6e4", borderRadius: 6, marginTop: 4, overflow: "hidden" }}>
+              {companyResults.map((c) => (
+                <button
+                  key={c.cid}
+                  type="button"
+                  onClick={() => onSelectCompany(c.cid)}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 10px", border: "none", borderBottom: "1px solid #eef1f6", background: "#fff", cursor: "pointer" }}
+                >
+                  {c.name} · {c.cid}
+                </button>
+              ))}
+            </div>
+          )}
+          {company && (
+            <div className="tz" style={{ marginTop: 4 }}>
+              {activeEnvironments(company).length} active environment(s) found in ServiceNow
+            </div>
+          )}
         </div>
 
-        <div className="field">
-          <label>CID</label>
-          <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} />
-        </div>
+        {company && !manualEntry ? (
+          <>
+            <div className="field">
+              <label>Environment</label>
+              <select value={environmentId} onChange={(e) => onSelectEnvironment(e.target.value)}>
+                <option value="">-- select an environment --</option>
+                {activeEnvironments(company).map((env) => (
+                  <option key={env.environmentId} value={env.environmentId}>
+                    {env.environment} · {env.environmentId}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-        <div className="field">
-          <label>Environment</label>
-          <input type="text" value={environment} onChange={(e) => setEnvironment(e.target.value)} />
-        </div>
+            {selectedEnv && (
+              <div className="warning-box" style={{ background: "#f2f7f0", borderColor: "#bcd4b4" }}>
+                <div>Entitlement: <strong>{entitlement || "—"}</strong></div>
+                <div>Environment ID: <strong>{environmentId}</strong></div>
+                <div>Host region: <strong>{selectedEnv.hostRegion || "—"}</strong></div>
+              </div>
+            )}
 
-        <div className="field">
-          <label>Environment ID</label>
-          <input type="text" value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} />
-        </div>
+            <button type="button" onClick={() => setManualEntry(true)} style={linkBtn}>
+              Can't find it? Enter manually
+            </button>
+          </>
+        ) : (
+          <>
+            {company && (
+              <button type="button" onClick={() => setManualEntry(false)} style={{ ...linkBtn, marginBottom: 4 }}>
+                ← Use ServiceNow values
+              </button>
+            )}
+            <div className="field">
+              <label>CID</label>
+              <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Entitlement</label>
+              <input type="text" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Environment</label>
+              <input type="text" value={environment} onChange={(e) => setEnvironment(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>Environment ID</label>
+              <input type="text" value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} />
+            </div>
+          </>
+        )}
 
         <div className="field">
           <label>{operationType === "build" ? "Select a build start date" : "Select a date and time"}</label>
