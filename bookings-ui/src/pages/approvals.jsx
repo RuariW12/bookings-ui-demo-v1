@@ -7,9 +7,9 @@ import './Approvals.css'
 
 // ── demo users for testing (remove when auth context exists) ──
 const DEMO_USERS = [
-  { name: 'Rebecca Lam',        email: 'rebecca.lam@microstrategy.com',        role: 'requester' },
-  { name: 'Diane Stout',        email: 'diane.stout@microstrategy.com',        role: 'requester' },
-  { name: 'Federico Alterleib', email: 'federico.alterleib@microstrategy.com', role: 'approver'  },
+  { name: 'John Smith',        email: 'johnsmith123@microstrategy.com',        role: 'requester' },
+  { name: 'Jane Doe',        email: 'janedoe123@microstrategy.com',        role: 'requester' },
+  { name: 'Michael Saylor', email: 'theboss@microstrategy.com', role: 'approver'  },
 ]
 
 // ── extra seed entries that are pending approval (demo data) ──
@@ -29,8 +29,8 @@ const PENDING_SEEDS = [
     startTime: '10:00 AM',
     endTime: '',
     csm: 'Rebecca Lam',
-    csmEmail: 'rebecca.lam@microstrategy.com',
-    submittedBy: 'rebecca.lam@microstrategy.com',
+    csmEmail: 'janedoe123@microstrategy.com',
+    submittedBy: 'janedoe123@microstrategy.com',
     submittedAt: '2026-06-23T14:22:00Z',
     notes: 'Customer requesting PROD build ahead of Q3 go-live.',
   },
@@ -48,9 +48,9 @@ const PENDING_SEEDS = [
     end: '2026-07-02',
     startTime: '4:00 AM',
     endTime: '12:00 PM',
-    csm: 'Diane Stout',
-    csmEmail: 'diane.stout@microstrategy.com',
-    submittedBy: 'diane.stout@microstrategy.com',
+    csm: 'John Smith',
+    csmEmail: 'johnsmith123@microstrategy.com',
+    submittedBy: 'johnsmith123@microstrategy.com',
     submittedAt: '2026-06-24T09:15:00Z',
     notes: '',
   },
@@ -68,9 +68,9 @@ const PENDING_SEEDS = [
     end: '2026-07-08',
     startTime: '10:00 PM',
     endTime: '12:00 AM',
-    csm: 'Rebecca Lam',
-    csmEmail: 'rebecca.lam@microstrategy.com',
-    submittedBy: 'rebecca.lam@microstrategy.com',
+    csm: 'Jane Doe',
+    csmEmail: 'janedoe123@microstrategy.com',
+    submittedBy: 'janedoe123@microstrategy.com',
     submittedAt: '2026-06-24T11:40:00Z',
     notes: 'Weekend cutover, customer confirmed downtime window.',
   },
