@@ -1,15 +1,15 @@
 // Approvals.jsx
 
 import { useState, useMemo, Fragment } from 'react'
-import { SEED_BOOKINGS } from '../lib/bookings'
-import { isApprover } from '../lib/approvers'
+import { SEED_BOOKINGS } from './bookings'
+import { isApprover } from './approvers'
 import './Approvals.css'
 
 // ── demo users for testing (remove when auth context exists) ──
 const DEMO_USERS = [
-  { name: 'John Smith',        email: 'johnsmith123@microstrategy.com',        role: 'requester' },
-  { name: 'Jane Doe',        email: 'janedoe123@microstrategy.com',        role: 'requester' },
-  { name: 'Michael Saylor', email: 'theboss@microstrategy.com', role: 'approver'  },
+  { name: 'Rebecca Lam',        email: 'rebecca.lam@microstrategy.com',        role: 'requester' },
+  { name: 'Diane Stout',        email: 'diane.stout@microstrategy.com',        role: 'requester' },
+  { name: 'Federico Alterleib', email: 'federico.alterleib@microstrategy.com', role: 'approver'  },
 ]
 
 // ── extra seed entries that are pending approval (demo data) ──
@@ -29,8 +29,8 @@ const PENDING_SEEDS = [
     startTime: '10:00 AM',
     endTime: '',
     csm: 'Rebecca Lam',
-    csmEmail: 'janedoe123@microstrategy.com',
-    submittedBy: 'janedoe123@microstrategy.com',
+    csmEmail: 'rebecca.lam@microstrategy.com',
+    submittedBy: 'rebecca.lam@microstrategy.com',
     submittedAt: '2026-06-23T14:22:00Z',
     notes: 'Customer requesting PROD build ahead of Q3 go-live.',
   },
@@ -48,9 +48,9 @@ const PENDING_SEEDS = [
     end: '2026-07-02',
     startTime: '4:00 AM',
     endTime: '12:00 PM',
-    csm: 'John Smith',
-    csmEmail: 'johnsmith123@microstrategy.com',
-    submittedBy: 'johnsmith123@microstrategy.com',
+    csm: 'Diane Stout',
+    csmEmail: 'diane.stout@microstrategy.com',
+    submittedBy: 'diane.stout@microstrategy.com',
     submittedAt: '2026-06-24T09:15:00Z',
     notes: '',
   },
@@ -68,9 +68,9 @@ const PENDING_SEEDS = [
     end: '2026-07-08',
     startTime: '10:00 PM',
     endTime: '12:00 AM',
-    csm: 'Jane Doe',
-    csmEmail: 'janedoe123@microstrategy.com',
-    submittedBy: 'janedoe123@microstrategy.com',
+    csm: 'Rebecca Lam',
+    csmEmail: 'rebecca.lam@microstrategy.com',
+    submittedBy: 'rebecca.lam@microstrategy.com',
     submittedAt: '2026-06-24T11:40:00Z',
     notes: 'Weekend cutover, customer confirmed downtime window.',
   },
@@ -221,7 +221,7 @@ export default function Approvals() {
                     <div className="meta-text">{b.cid}</div>
                   </td>
                   <td>{b.region}</td>
-                  <td>
+                  <td className="col-date">
                     <div>{formatDate(b.start)}</div>
                     {b.end && b.end !== b.start && (
                       <div className="meta-text">→ {formatDate(b.end)}</div>
@@ -233,12 +233,12 @@ export default function Approvals() {
                       {STATUS_LABELS[b.status] || b.status}
                     </span>
                   </td>
-                  <td>
+                  <td className="col-submitted">
                     <div className="meta-text">{b.submittedBy ? b.submittedBy.split('@')[0].replace('.', ' ') : '—'}</div>
                     {b.submittedAt && <div className="meta-text">{formatTimestamp(b.submittedAt)}</div>}
                   </td>
                   {userIsApprover && (
-                    <td onClick={e => e.stopPropagation()}>
+                    <td className="col-actions" onClick={e => e.stopPropagation()}>
                       {b.status === 'pending' ? (
                         <div className="approval-actions">
                           <button className="btn-approve" onClick={() => handleApprove(b.id)}>Approve</button>

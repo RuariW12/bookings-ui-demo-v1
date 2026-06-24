@@ -1,7 +1,8 @@
 // approvers.js
 
 const APPROVER_EMAILS = [
-  'rwhalen@strategy.com'
+  'rwhalen@strategy.com',
+  'theboss@microstrategy.com'
 ]
 
 /** @param {string} email */
