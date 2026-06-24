@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import App from './pages/App'          // booking form 
+import App from './pages/App'          // booking form (just the fields)
 import Schedule from './pages/Schedule'
 import Approvals from './pages/approvals'
 import strategyLogo from './assets/strategy.jpg'
@@ -9,14 +9,13 @@ export default function Root() {
   const [tab, setTab] = useState("book")  // "book" | "schedule" | "approvals"
 
   return (
-    <div className={"page" + (tab === "schedule" ? " page--wide" : "")}>
+    <div className={"page" + (tab === "schedule" || tab === "approvals" ? " page--wide" : "")}>
       <header className="brand-header">
         <img src={strategyLogo} className="logo-img" alt="Strategy" />
         <h1 className="brand-title">Strategy</h1>
       </header>
 
       <main className="content">
-        {/* Orange bar is the page switcher */}
         <div className="service-card service-tabs">
           <button
             className={"service-tab" + (tab === "book" ? " active" : "")}

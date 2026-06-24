@@ -1,9 +1,9 @@
 // Approvals.jsx
 
 import { useState, useMemo, Fragment } from 'react'
-import { SEED_BOOKINGS } from './bookings'
-import { isApprover } from './approvers'
-import './Approvals.css'
+import { SEED_BOOKINGS } from '../lib/bookings'
+import { isApprover } from '../lib/approvers'
+import './approvals.css'
 
 // ── demo users for testing (remove when auth context exists) ──
 const DEMO_USERS = [
