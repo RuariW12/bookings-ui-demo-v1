@@ -2,6 +2,7 @@ import { useState } from 'react'
 import './App.css'
 import { REGIONS, SEED_BOOKINGS } from '../lib/bookings'
 import { searchCompanies, getCompany, activeEnvironments } from '../lib/servicenow'
+import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
 
 const OPERATION_TYPES = {
   build: {
