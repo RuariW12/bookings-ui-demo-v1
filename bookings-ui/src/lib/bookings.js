@@ -1,4 +1,3 @@
-
 export const REGIONS = ["CLD-CTC", "CLD-EMEA", "CLD-HQ"]
 
 export const REGION_BUILD_CAPACITY = {
@@ -23,8 +22,8 @@ export const SEED_BOOKINGS = [
     endTime: "4:30 PM",
     durationHours: 8,
     tier: "prod_large",
-    bookerName: "A. Sampalione",
-    csmEmail: "asampalione@microstrategy.com",
+    bookerName: "J. Okafor",
+    csmEmail: "jokafor@example.com",
   },
   {
     id: "pb-0002",
@@ -38,8 +37,8 @@ export const SEED_BOOKINGS = [
     start: "2026-06-22",
     end: "2026-06-26",
     durationHours: 40,
-    bookerName: "V. Solignac",
-    csmEmail: "vsolignac@microstrategy.com",
+    bookerName: "M. Delgado",
+    csmEmail: "mdelgado@example.com",
   },
   {
     id: "pb-0003",
@@ -56,8 +55,8 @@ export const SEED_BOOKINGS = [
     endTime: "4:00 PM",
     durationHours: 6,
     tier: "lower",
-    bookerName: "B. Colin",
-    csmEmail: "bcolin@microstrategy.com",
+    bookerName: "T. Novak",
+    csmEmail: "tnovak@example.com",
   },
   {
     id: "pb-0004",
@@ -71,8 +70,8 @@ export const SEED_BOOKINGS = [
     start: "2026-06-15",
     end: "2026-06-19",
     durationHours: 40,
-    bookerName: "M. Scaggs",
-    csmEmail: "mscaggs@microstrategy.com",
+    bookerName: "S. Whitfield",
+    csmEmail: "swhitfield@example.com",
   },
   {
     id: "pb-0005",
@@ -88,8 +87,8 @@ export const SEED_BOOKINGS = [
     startTime: "11:00 AM",
     endTime: "1:00 PM",
     durationHours: 2,
-    bookerName: "R. Lam",
-    csmEmail: "rlam@microstrategy.com",
+    bookerName: "L. Ferraro",
+    csmEmail: "lferraro@example.com",
   },
   {
     id: "pb-0006",
@@ -105,8 +104,8 @@ export const SEED_BOOKINGS = [
     startTime: "1:00 PM",
     endTime: "3:00 PM",
     durationHours: 2,
-    bookerName: "D. Stout",
-    csmEmail: "dstout@microstrategy.com",
+    bookerName: "R. Banerjee",
+    csmEmail: "rbanerjee@example.com",
   },
   {
     id: "pb-0007",
@@ -123,8 +122,8 @@ export const SEED_BOOKINGS = [
     endTime: "2:30 PM",
     durationHours: 6,
     tier: "lower",
-    bookerName: "K. Sakamoto",
-    csmEmail: "ksakamoto@microstrategy.com",
+    bookerName: "H. Park",
+    csmEmail: "hpark@example.com",
   },
   {
     id: "pb-0008",
@@ -140,8 +139,8 @@ export const SEED_BOOKINGS = [
     startTime: "11:30 AM",
     endTime: "1:30 PM",
     durationHours: 2,
-    bookerName: "T. Miekisz",
-    csmEmail: "tmiekisz@microstrategy.com",
+    bookerName: "E. Castellano",
+    csmEmail: "ecastellano@example.com",
   },
   {
     id: "pb-0009",
@@ -155,8 +154,8 @@ export const SEED_BOOKINGS = [
     start: "2026-06-22",
     end: "2026-06-26",
     durationHours: 40,
-    bookerName: "P. Singh",
-    csmEmail: "pasingh@microstrategy.com",
+    bookerName: "N. Abadi",
+    csmEmail: "nabadi@example.com",
   },
   {
     id: "pb-0010",
@@ -170,8 +169,8 @@ export const SEED_BOOKINGS = [
     start: "2026-06-23",
     end: "2026-06-29",
     durationHours: 40,
-    bookerName: "A. Lacuna",
-    csmEmail: "alacuna@microstrategy.com",
+    bookerName: "G. Vasquez",
+    csmEmail: "gvasquez@example.com",
   },
 ]
 
