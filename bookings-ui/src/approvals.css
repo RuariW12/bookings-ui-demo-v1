@@ -1,0 +1,238 @@
+/* Approvals.css */
+
+/* ── layout ─────────────────────────────────────────────── */
+.approvals {
+  padding: 20px 24px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.approvals-demo-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: #fef3cd;
+  border: 1px solid #f0d77e;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #856404;
+}
+.approvals-demo-bar select {
+  font-size: 13px;
+  padding: 3px 8px;
+  border: 1px solid #c9b872;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.approval-filters {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #eee;
+}
+.filter-tab {
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: #888;
+  padding: 10px 18px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.15s;
+}
+.filter-tab:hover { color: #555; }
+.filter-tab.active {
+  color: #e35205;
+  border-bottom-color: #e35205;
+}
+.filter-count {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  background: #eee;
+  color: #666;
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.filter-tab.active .filter-count {
+  background: #fde8dc;
+  color: #e35205;
+}
+
+/* ── table ──────────────────────────────────────────────── */
+.approvals-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.approvals-table thead th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+  padding: 8px 10px;
+  border-bottom: 2px solid #e5e5e5;
+  white-space: nowrap;
+}
+.approvals-table tbody tr {
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.1s;
+}
+.approvals-table tbody tr:hover {
+  background: #fafafa;
+}
+.approvals-table td {
+  padding: 12px 10px;
+  vertical-align: middle;
+}
+
+/* ── operation type pill ────────────────────────────────── */
+.op-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.op-pill.build    { background: #e3f0ff; color: #1a5fb4; }
+.op-pill.refresh  { background: #f0e6ff; color: #6b21a8; }
+.op-pill.cutover  { background: #ffecd6; color: #a44b00; }
+
+/* ── status badge ───────────────────────────────────────── */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.status-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.status-badge.pending  { background: #fef3cd; color: #856404; }
+.status-badge.pending .dot  { background: #d4a017; }
+.status-badge.approved { background: #d4edda; color: #155724; }
+.status-badge.approved .dot { background: #28a745; }
+.status-badge.rejected { background: #f8d7da; color: #721c24; }
+.status-badge.rejected .dot { background: #dc3545; }
+.status-badge.cancelled { background: #e9ecef; color: #6c757d; }
+.status-badge.cancelled .dot { background: #adb5bd; }
+
+/* ── action buttons ─────────────────────────────────────── */
+.approval-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.btn-approve, .btn-reject {
+  border: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: filter 0.12s;
+}
+.btn-approve {
+  background: #28a745;
+  color: #fff;
+}
+.btn-approve:hover { filter: brightness(0.9); }
+.btn-reject {
+  background: #fff;
+  color: #dc3545;
+  border: 1px solid #dc3545;
+}
+.btn-reject:hover {
+  background: #fdf0f0;
+}
+
+/* ── reject reason inline form ──────────────────────────── */
+.reject-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.reject-form input {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid #dc3545;
+  border-radius: 4px;
+  width: 200px;
+}
+.reject-form button {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+}
+.reject-confirm {
+  background: #dc3545;
+  color: #fff;
+}
+.reject-cancel {
+  background: #eee;
+  color: #555;
+}
+
+/* ── meta text (submitted by, decided by, date) ─────────── */
+.meta-text {
+  font-size: 12px;
+  color: #888;
+}
+
+/* ── detail row (expandable) ────────────────────────────── */
+.detail-row td {
+  padding: 0 10px 14px;
+  background: #fafafa;
+  border-bottom: 1px solid #eee;
+}
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px 24px;
+  padding: 12px 0 4px;
+  font-size: 13px;
+}
+.detail-grid dt {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #999;
+  margin-bottom: 2px;
+}
+.detail-grid dd {
+  margin: 0 0 8px;
+  color: #333;
+}
+
+/* ── empty state ────────────────────────────────────────── */
+.approvals-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #aaa;
+  font-size: 14px;
+}
