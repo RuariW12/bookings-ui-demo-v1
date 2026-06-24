@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import './Schedule.css'
-import { REGIONS, SEED_BOOKINGS, REGION_BUILD_CAPACITY, REGION_SLOTS } from './bookings'
+import { REGIONS, SEED_BOOKINGS, REGION_BUILD_CAPACITY, REGION_SLOTS } from '../lib/bookings.js'
+import { OPERATING_HOURS } from '../lib/operatingHours'
 
 const NUM_DAYS = 14
 const LANE_H = 58
