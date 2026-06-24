@@ -9,7 +9,7 @@ import './approvals.css'
 const DEMO_USERS = [
   { name: 'John Smith',     email: 'johnsmith123@example.com',  role: 'requester' },
   { name: 'Jane Doe',       email: 'janedoe123@example.com',    role: 'requester' },
-  { name: 'Michael Saylor', email: 'theboss@example.com',       role: 'approver'  },
+  { name: 'Tanner G.', email: 'theboss@example.com',       role: 'approver'  },
 ]
 
 // ── extra seed entries that are pending approval (demo data) ──
