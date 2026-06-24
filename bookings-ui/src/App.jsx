@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './App.css'
-import { REGIONS, REGION_SLOTS, SEED_BOOKINGS } from './bookings'
+import { REGIONS, SEED_BOOKINGS } from './bookings'
+import { allowedStartTimes } from './operatingHours'
 
 const OPERATION_TYPES = {
   build: {
@@ -173,12 +174,21 @@ function computeEndTime(startLabel, hours) {
   return `${dispH}:${String(em).padStart(2, "0")} ${ampm}${nextDay ? " (+1d)" : ""}`
 }
 
+// Start times available for a timed op in a region, as labels ("9:00 PM").
+// Refresh + cutover are phase-2: they must finish before the region closes,
+// so the window is narrowed by the operation's duration (handled in the module).
+// Builds don't pick a time, so this isn't called for them.
+function slotsFor(region, type, durationHours) {
+  if (!region || type === "build") return []
+  return allowedStartTimes(region, durationHours * 60, true).map((s) => s.label)
+}
+
 function App() {
   // operation
   const [operationType, setOperationType] = useState("")  // "" | build | refresh | cutover
   const [tier, setTier] = useState("prod_large")           // refresh only: lower | prod_large
 
-  // region — drives capacity, slot list, and the time zone the times are read in.
+  // region — drives capacity, slot list, and the operating window the times sit in.
   // Chosen explicitly by the CSM.
   const [region, setRegion] = useState("")
 
@@ -204,8 +214,8 @@ function App() {
   const buildSpan = operationType === "build" && date ? businessDaysFrom(date, cfg.spanBusinessDays) : []
   const endTime = cfg && cfg.pickTime && time ? computeEndTime(time, hours) : ""
 
-  // Per-region slot availability for the selected day (timed ops only).
-  const regionSlots = region ? (REGION_SLOTS[region] || []) : []
+  // Slots now come from the region's operating hours, narrowed by the op duration.
+  const regionSlots = region && cfg?.pickTime ? slotsFor(region, operationType, hours) : []
   const takenSet = region && date && cfg?.pickTime ? takenSlots(region, date) : new Set()
   const freeSlots = regionSlots.filter((s) => !takenSet.has(s))
 
@@ -223,7 +233,7 @@ function App() {
     if (t !== "refresh") setTier("prod_large")
   }
 
-  // Changing region can invalidate the chosen slot (different list / now taken).
+  // Changing region can invalidate the chosen slot (different window / now taken).
   const onRegionChange = (r) => {
     setRegion(r)
     setTime("")
@@ -234,7 +244,7 @@ function App() {
     if (!operationType) return false
     if (day < startOfToday()) return false
     // Refresh defaults to weekdays only — the doc gives no weekend provision
-    // for refresh (only cutover names one). 
+    // for refresh (only cutover names one).
     if (operationType === "refresh" && isWeekend(day)) return false
     if (operationType === "build") {
       // Build starts on the selected day and runs 5 business days forward, so
@@ -245,7 +255,7 @@ function App() {
     // timed ops (refresh / cutover): respect lead time
     if (day < addDays(startOfToday(), leadDaysFor(operationType, day))) return false
     if (region) {
-      const slots = REGION_SLOTS[region] || []
+      const slots = slotsFor(region, operationType, hours)
       const taken = takenSlots(region, day)
       if (slots.length > 0 && slots.every((s) => taken.has(s))) return false
     }
@@ -431,7 +441,11 @@ function App() {
                       </button>
                     )
                   })}
-                  {regionSlots.length === 0 && <div className="cal-hint">No slots configured for {region}.</div>}
+                  {regionSlots.length === 0 && (
+                    <div className="cal-hint">
+                      No valid start times — a {hours}h {cfg.label.toLowerCase()} doesn't fit {region}'s operating hours.
+                    </div>
+                  )}
                   {time && (
                     <div className="cal-hint" style={{ marginTop: 8 }}>
                       {hours}h · {time} – {endTime}

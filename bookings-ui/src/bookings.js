@@ -1,3 +1,4 @@
+
 export const REGIONS = ["CLD-CTC", "CLD-EMEA", "CLD-HQ"]
 
 export const REGION_BUILD_CAPACITY = {
