@@ -2,7 +2,7 @@
 
 const APPROVER_EMAILS = [
   'rwhalen@strategy.com',
-  'theboss@microstrategy.com'
+  'theboss@example.com'
 ]
 
 /** @param {string} email */
