@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import './App.css'
-import { REGIONS, SEED_BOOKINGS } from './bookings'
-import { allowedStartTimes } from './operatingHours'
-import { searchCompanies, getCompany, activeEnvironments } from './serviceNow'
+import { REGIONS, SEED_BOOKINGS } from '../lib/bookings'
+import { allowedStartTimes } from '../operatingHours'
+import { searchCompanies, getCompany, activeEnvironments } from '../serviceNow'
 
 const OPERATION_TYPES = {
   build: {

@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import App from './App'          // booking form 
-import Schedule from './Schedule'
-import Approvals from './Approvals'
+import App from './pages/App'          // booking form 
+import Schedule from './pages/Schedule'
+import Approvals from './pages/approvals'
 import strategyLogo from './assets/strategy.jpg'
-import './App.css'
+import './pages/App.css'
 
 export default function Root() {
   const [tab, setTab] = useState("book")  // "book" | "schedule" | "approvals"
