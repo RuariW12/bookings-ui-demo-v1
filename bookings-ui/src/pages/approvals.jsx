@@ -106,8 +106,6 @@ export default function Approvals() {
   const currentUser = DEMO_USERS[demoIdx]
   const userIsApprover = isApprover(currentUser.email)
 
-  // Merge SEED_BOOKINGS + PENDING_SEEDS into one local list.
-  // Add submittedBy/submittedAt to old seeds so the table renders cleanly.
   const [bookings, setBookings] = useState(() => {
     const normalized = SEED_BOOKINGS.map(b => ({
       ...b,
