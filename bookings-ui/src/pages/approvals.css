@@ -7,7 +7,6 @@
   margin: 0 auto;
 }
 
-/* demo-only user picker — remove when real auth lands */
 .approvals-demo-bar {
   display: flex;
   align-items: center;
