@@ -7,6 +7,7 @@
   margin: 0 auto;
 }
 
+/* demo-only user picker — remove when real auth lands */
 .approvals-demo-bar {
   display: flex;
   align-items: center;
@@ -27,6 +28,7 @@
   background: #fff;
 }
 
+/* ── status filter tabs ─────────────────────────────────── */
 .approval-filters {
   display: flex;
   gap: 2px;
@@ -96,6 +98,23 @@
   vertical-align: middle;
 }
 
+/* keep dates and timestamps on a single line */
+.approvals-table td.col-date,
+.approvals-table td.col-date .meta-text,
+.approvals-table td.col-submitted .meta-text {
+  white-space: nowrap;
+}
+/* actions column never wraps its buttons */
+.approvals-table td.col-actions {
+  white-space: nowrap;
+}
+.approval-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
 /* ── operation type pill ────────────────────────────────── */
 .op-pill {
   display: inline-block;
@@ -135,11 +154,6 @@
 .status-badge.cancelled .dot { background: #adb5bd; }
 
 /* ── action buttons ─────────────────────────────────────── */
-.approval-actions {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
 .btn-approve, .btn-reject {
   border: none;
   font: inherit;
