@@ -2,11 +2,17 @@ import { useState } from 'react'
 import App from './pages/App'          // booking form (just the fields)
 import Schedule from './pages/Schedule'
 import Approvals from './pages/approvals'
+import Login from './pages/Login'
 import strategyLogo from './assets/strategy.jpg'
+import { useAuth } from './lib/auth'
 import './pages/App.css'
 
 export default function Root() {
+  const { user, isAuthenticated, signOut } = useAuth()
   const [tab, setTab] = useState("book")  // "book" | "schedule" | "approvals"
+
+  // Gate: nothing renders until you've signed in.
+  if (!isAuthenticated) return <Login />
 
   return (
     <div className={"page" + (tab === "schedule" || tab === "approvals" ? " page--wide" : "")}>
@@ -14,6 +20,31 @@ export default function Root() {
         <img src={strategyLogo} className="logo-img" alt="Strategy" />
         <h1 className="brand-title">Strategy</h1>
       </header>
+
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12,
+        padding: "8px 16px", fontSize: "0.85rem", color: "#242424",
+        borderBottom: "1px solid #e1dfdd", background: "#faf9f8",
+      }}>
+        <span>
+          {user.name}
+          {user.isApprover && (
+            <span style={{
+              marginLeft: 8, fontSize: "0.72rem", padding: "1px 6px", borderRadius: 4,
+              background: "#fdecdf", color: "#c2410c",
+            }}>approver</span>
+          )}
+        </span>
+        <button
+          onClick={signOut}
+          style={{
+            fontSize: "0.78rem", padding: "3px 8px", border: "1px solid #c8c6c4",
+            borderRadius: 4, background: "#fff", cursor: "pointer", color: "#605e5c",
+          }}
+        >
+          Sign out
+        </button>
+      </div>
 
       <main className="content">
         <div className="service-card service-tabs">
