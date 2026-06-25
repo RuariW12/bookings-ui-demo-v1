@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../lib/auth'
+import strategyLogo from '../assets/strategy.jpg'
 
 const ALLOWED_DOMAINS = ['strategy.com', 'microstrategy.com']
 
@@ -20,7 +21,7 @@ const INK = '#242424'
 const MUTED = '#605e5c'
 const BORDER = '#d7d5d2'
 const HAIRLINE = '#e6e4e2'
-const ACCENT = '#1b3a5b'    
+const ACCENT = '#1b3a5b'      // deep slate-blue: primary action
 const SURFACE = '#f3f2f1'
 
 export default function Login() {
@@ -46,16 +47,15 @@ export default function Login() {
       background: SURFACE, padding: 16, boxSizing: 'border-box',
     }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
-        {/* brand mark */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 22 }}>
-          <span style={{ width: 18, height: 18, borderRadius: 3, background: '#e35205', display: 'inline-block' }} />
-          <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em', color: INK }}>Strategy</span>
-        </div>
-
         <div style={{
           background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10,
           padding: 28, boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
         }}>
+          <img
+            src={strategyLogo}
+            alt="Strategy"
+            style={{ display: 'block', width: 150, height: 'auto', margin: '0 auto 20px' }}
+          />
           <h2 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 600, color: INK }}>
             Sign in to continue
           </h2>
@@ -115,6 +115,10 @@ export default function Login() {
           ))}
         </div>
 
+        <p style={{ fontSize: '0.72rem', color: MUTED, lineHeight: 1.5, margin: '14px 4px 0' }}>
+          Demo: this checks the email domain. The real version swaps this screen for
+          Microsoft sign-in behind the same boundary — the rest of the app is unchanged.
+        </p>
       </div>
     </div>
   )
