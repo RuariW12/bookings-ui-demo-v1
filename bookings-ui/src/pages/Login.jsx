@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { useAuth } from '../lib/auth'
-import strategyLogo from '../assets/strategy.jpg'
-import './App.css'
 
 const ALLOWED_DOMAINS = ['strategy.com', 'microstrategy.com']
 
@@ -16,6 +14,14 @@ function deriveName(email) {
   const local = email.split('@')[0]
   return local.charAt(0).toUpperCase() + local.slice(1)
 }
+
+// palette
+const INK = '#242424'
+const MUTED = '#605e5c'
+const BORDER = '#d7d5d2'
+const HAIRLINE = '#e6e4e2'
+const ACCENT = '#1b3a5b'    
+const SURFACE = '#f3f2f1'
 
 export default function Login() {
   const { signIn } = useAuth()
@@ -35,22 +41,29 @@ export default function Login() {
   }
 
   return (
-    <div className="page">
-      <header className="brand-header">
-        <img src={strategyLogo} className="logo-img" alt="Strategy" />
-        <h1 className="brand-title">Strategy</h1>
-      </header>
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: SURFACE, padding: 16, boxSizing: 'border-box',
+    }}>
+      <div style={{ width: '100%', maxWidth: 380 }}>
+        {/* brand mark */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 22 }}>
+          <span style={{ width: 18, height: 18, borderRadius: 3, background: '#e35205', display: 'inline-block' }} />
+          <span style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-0.01em', color: INK }}>Strategy</span>
+        </div>
 
-      <main className="content">
-        <div className="service-card" style={{ maxWidth: 380, margin: '0 auto', padding: 24 }}>
-          <h2 style={{ margin: '0 0 4px', fontSize: '1.05rem', color: '#242424' }}>
+        <div style={{
+          background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10,
+          padding: 28, boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        }}>
+          <h2 style={{ margin: '0 0 4px', fontSize: '1.05rem', fontWeight: 600, color: INK }}>
             Sign in to continue
           </h2>
-          <p style={{ margin: '0 0 18px', fontSize: '0.85rem', color: '#605e5c' }}>
+          <p style={{ margin: '0 0 20px', fontSize: '0.85rem', color: MUTED }}>
             Booking and approvals are limited to Strategy staff.
           </p>
 
-          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: 4, color: '#242424' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: 5, color: INK }}>
             Work email
           </label>
           <input
@@ -60,8 +73,8 @@ export default function Login() {
             onChange={(e) => { setEmail(e.target.value); setError('') }}
             onKeyDown={(e) => e.key === 'Enter' && attempt(email)}
             style={{
-              width: '100%', boxSizing: 'border-box', padding: '8px 10px', fontSize: '0.9rem',
-              border: `1px solid ${error ? '#c2410c' : '#c8c6c4'}`, borderRadius: 4,
+              width: '100%', boxSizing: 'border-box', padding: '9px 11px', fontSize: '0.9rem',
+              border: `1px solid ${error ? '#c2410c' : BORDER}`, borderRadius: 6, color: INK, outline: 'none',
             }}
           />
           {error && <p style={{ color: '#c2410c', fontSize: '0.75rem', margin: '6px 0 0' }}>{error}</p>}
@@ -70,17 +83,17 @@ export default function Login() {
             type="button"
             onClick={() => attempt(email)}
             style={{
-              width: '100%', marginTop: 14, padding: '9px 0', fontSize: '0.9rem', fontWeight: 600,
-              color: '#fff', background: '#e35205', border: 'none', borderRadius: 4, cursor: 'pointer',
+              width: '100%', marginTop: 16, padding: '10px 0', fontSize: '0.9rem', fontWeight: 600,
+              color: '#fff', background: ACCENT, border: 'none', borderRadius: 6, cursor: 'pointer',
             }}
           >
             Continue
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' }}>
-            <span style={{ flex: 1, height: 1, background: '#e1dfdd' }} />
-            <span style={{ fontSize: '0.72rem', color: '#605e5c' }}>or try the demo</span>
-            <span style={{ flex: 1, height: 1, background: '#e1dfdd' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0' }}>
+            <span style={{ flex: 1, height: 1, background: HAIRLINE }} />
+            <span style={{ fontSize: '0.72rem', color: MUTED }}>or try the demo</span>
+            <span style={{ flex: 1, height: 1, background: HAIRLINE }} />
           </div>
 
           {QUICK_LOGINS.map((q) => (
@@ -88,18 +101,25 @@ export default function Login() {
               key={q.email}
               type="button"
               onClick={() => attempt(q.email, q.name)}
+              onMouseEnter={(e) => (e.currentTarget.style.background = SURFACE)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
               style={{
-                width: '100%', marginBottom: 8, padding: '8px 10px', fontSize: '0.85rem',
-                textAlign: 'left', background: '#fff', border: '1px solid #c8c6c4',
-                borderRadius: 4, cursor: 'pointer', color: '#242424',
+                width: '100%', marginBottom: 8, padding: '9px 11px', fontSize: '0.85rem',
+                textAlign: 'left', background: '#fff', border: `1px solid ${BORDER}`,
+                borderRadius: 6, cursor: 'pointer', color: INK,
               }}
             >
               {q.label}
-              <span style={{ display: 'block', fontSize: '0.72rem', color: '#605e5c' }}>{q.email}</span>
+              <span style={{ display: 'block', fontSize: '0.72rem', color: MUTED, marginTop: 1 }}>{q.email}</span>
             </button>
           ))}
         </div>
-      </main>
+
+        <p style={{ fontSize: '0.72rem', color: MUTED, lineHeight: 1.5, margin: '14px 4px 0' }}>
+          Demo: this checks the email domain. The real version swaps this screen for
+          Microsoft sign-in behind the same boundary — the rest of the app is unchanged.
+        </p>
+      </div>
     </div>
   )
 }
