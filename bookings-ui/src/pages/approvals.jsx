@@ -1,11 +1,7 @@
-import { useState } from 'react'
-import App from './pages/App'          // booking form (just the fields)
-import Schedule from './pages/Schedule'
-import Approvals from './pages/approvals'
-import Login from './pages/Login'
-import strategyLogo from './assets/strategy.jpg'
-import { useAuth } from './lib/auth'
-import './pages/App.css'
+import { useState, useMemo, Fragment } from 'react'
+import { SEED_BOOKINGS } from '../lib/bookings'
+import { useAuth } from '../lib/auth'
+import './approvals.css'
 
 export default function Root() {
   const { user, isAuthenticated, signOut } = useAuth()
