@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
 import { REGIONS, SEED_BOOKINGS } from '../lib/bookings'
-import { searchCompanies, getCompany, activeEnvironments } from '../lib/servicenow'
+import { getCompany, activeEnvironments, listCompanies } from '../lib/servicenow'
 import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
 
 const OPERATION_TYPES = {
@@ -197,9 +197,10 @@ function App() {
   const [environment, setEnvironment] = useState("")
   const [environmentId, setEnvironmentId] = useState("")
   const [companyQuery, setCompanyQuery] = useState("")
-  const [companyResults, setCompanyResults] = useState([])
   const [company, setCompany] = useState(null)       // resolved SNOW company record
   const [manualEntry, setManualEntry] = useState(false)
+  const [allCompanies, setAllCompanies] = useState([])  // combobox source — every company
+  const [companyOpen, setCompanyOpen] = useState(false) // combobox dropdown visibility
 
   // calendar
   const [date, setDate] = useState(null)   // build: delivery date; refresh/cutover: operation date
@@ -211,6 +212,9 @@ function App() {
   const [csmEmail, setCsmEmail] = useState("")
   const [utilityBox, setUtilityBox] = useState("")
   const [privateNotes, setPrivateNotes] = useState("")
+
+  // Load the full company list once so the dropdown shows options before typing.
+  useEffect(() => { listCompanies().then(setAllCompanies) }, [])
 
   const cfg = operationType ? OPERATION_TYPES[operationType] : null
   const hours = operationType ? operationHours(operationType, tier) : 0
@@ -246,10 +250,28 @@ function App() {
     setTime("")
   }
 
-  // --- ServiceNow lookup handlers ---
-  const onCompanySearch = async (q) => {
-    setCompanyQuery(q)
-    setCompanyResults(q.trim() ? await searchCompanies(q) : [])
+  // --- Company combobox: type to filter, or pick from the list ---
+  // Filtered list: everything when the box is empty (so the CSM sees what's
+  // available), narrowing as they type. Matches name or CID, case-insensitive.
+  const companyMatches = (() => {
+    const q = companyQuery.trim().toLowerCase()
+    if (q === "" || company) return allCompanies
+    return allCompanies.filter(
+      (c) => c.name.toLowerCase().includes(q) || c.cid.toLowerCase().includes(q)
+    )
+  })()
+
+  // Typing edits the query and deselects any resolved company so stale SNOW
+  // values don't linger. No match just leaves `company` null, which keeps the
+  // manual fields below visible — the seamless fallback.
+  const onCompanyInput = (value) => {
+    setCompanyQuery(value)
+    setCompanyOpen(true)
+    if (company) {
+      setCompany(null)
+      setEntitlement(""); setEnvironment(""); setEnvironmentId("")
+    }
+    setManualEntry(false)
   }
 
   const onSelectCompany = async (selCid) => {
@@ -258,10 +280,23 @@ function App() {
     setCid(c?.cid ?? "")
     setEntitlement(c?.entitlement ?? "")
     setCompanyQuery(c ? `${c.name} · ${c.cid}` : "")
-    setCompanyResults([])
     setEnvironment("")
     setEnvironmentId("")
     setManualEntry(false)
+  }
+
+  const pickCompany = (selCid) => {
+    onSelectCompany(selCid)
+    setCompanyOpen(false)
+  }
+
+  // Enter selects the only/first match; Escape closes the list.
+  const onCompanyKeyDown = (e) => {
+    if (e.key === "Escape") { setCompanyOpen(false); return }
+    if (e.key === "Enter" && companyOpen && companyMatches.length > 0) {
+      e.preventDefault()
+      pickCompany(companyMatches[0].cid)
+    }
   }
 
   const onSelectEnvironment = (envId) => {
@@ -337,6 +372,8 @@ function App() {
   const canBook = !!operationType && !!region && !!date && (!cfg.pickTime || !!time)
 
   const linkBtn = { background: "none", border: "none", color: "#3a5bbf", cursor: "pointer", padding: 0, fontSize: "0.85em" }
+  const comboList = { position: "absolute", left: 0, right: 0, top: "100%", zIndex: 20, marginTop: 2, maxHeight: 220, overflowY: "auto", background: "#fff", border: "1px solid #cdd6e4", borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }
+  const comboItem = { display: "block", width: "100%", textAlign: "left", padding: "7px 10px", border: "none", borderBottom: "1px solid #eef1f6", background: "#fff", cursor: "pointer", fontSize: "0.9rem" }
 
   return (
     <>
@@ -384,27 +421,38 @@ function App() {
           </div>
         )}
 
-        {/* --- ServiceNow company lookup --- */}
-        <div className="field">
+        {/* --- ServiceNow company lookup (combobox: type to filter or pick) --- */}
+        <div className="field" style={{ position: "relative" }}>
           <label>Company / CID</label>
           <input
             type="text"
             value={companyQuery}
-            placeholder="Search by company name or CID…"
-            onChange={(e) => onCompanySearch(e.target.value)}
+            placeholder="Type to search, or pick from the list…"
+            autoComplete="off"
+            onChange={(e) => onCompanyInput(e.target.value)}
+            onFocus={() => setCompanyOpen(true)}
+            onBlur={() => setTimeout(() => setCompanyOpen(false), 120)}
+            onKeyDown={onCompanyKeyDown}
           />
-          {companyResults.length > 0 && (
-            <div style={{ border: "1px solid #cdd6e4", borderRadius: 6, marginTop: 4, overflow: "hidden" }}>
-              {companyResults.map((c) => (
-                <button
-                  key={c.cid}
-                  type="button"
-                  onClick={() => onSelectCompany(c.cid)}
-                  style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 10px", border: "none", borderBottom: "1px solid #eef1f6", background: "#fff", cursor: "pointer" }}
-                >
-                  {c.name} · {c.cid}
-                </button>
-              ))}
+          {companyOpen && (
+            <div style={comboList}>
+              {companyMatches.length > 0 ? (
+                companyMatches.map((c) => (
+                  <button
+                    key={c.cid}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => pickCompany(c.cid)}
+                    style={comboItem}
+                  >
+                    {c.name} · {c.cid}
+                  </button>
+                ))
+              ) : (
+                <div style={{ padding: "8px 10px", color: "#605e5c", fontSize: "0.85rem" }}>
+                  No match — enter the details manually below.
+                </div>
+              )}
             </div>
           )}
           {company && (
