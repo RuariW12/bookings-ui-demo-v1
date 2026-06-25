@@ -13,14 +13,12 @@ and cutovers for the CSM and CLS Team
 ## What it replaces
 
 **The old manual workflow:**  CSM's book with customer and report into Microsoft Teams with CLS to find best available times. Once a consensus is found, CSM's go and book into float which is then approved by a CLS manager. 
-**THe new workflow:** Similar to the OCU booking process, a CSM books the available date through a scheduling UI. Can automatically find optimal times, and the approval process is automated through outlook and teams. Once booked, on the same page can find the global calendar which replaces the float UI and adds further integration/configurability. 
+**The new workflow:** Similar to the OCU booking process, a CSM books the available date through a scheduling UI. Can automatically find optimal times, and the approval process is consolidated into the app. Once booked, on the same page can find the global calendar which replaces the float UI and adds further integration/configurability. 
 
 ## Framework
 
 - React + Vite (JavaScript)
 - Mock data in `bookings.js` (the running demo reads this in memory there is no database yet)
-- A Power Automate flow (Microsoft Bookings → SharePoint → Teams Approvals → Outlook)
-  handles the approval pattern
 
 ## Running locally
 

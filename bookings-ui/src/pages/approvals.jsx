@@ -2,15 +2,8 @@
 
 import { useState, useMemo, Fragment } from 'react'
 import { SEED_BOOKINGS } from '../lib/bookings'
-import { isApprover } from '../lib/approvers'
+import { useAuth } from '../lib/auth'
 import './approvals.css'
-
-// ── demo users for testing (remove when auth context exists) ──
-const DEMO_USERS = [
-  { name: 'John Smith',     email: 'johnsmith123@example.com',  role: 'requester' },
-  { name: 'Jane Doe',       email: 'janedoe123@example.com',    role: 'requester' },
-  { name: 'Tanner G.', email: 'theboss@example.com',       role: 'approver'  },
-]
 
 // ── extra seed entries that are pending approval (demo data) ──
 const PENDING_SEEDS = [
@@ -102,9 +95,9 @@ function formatTimestamp(iso) {
 
 export default function Approvals() {
   // ── state ──
-  const [demoIdx, setDemoIdx] = useState(0)
-  const currentUser = DEMO_USERS[demoIdx]
-  const userIsApprover = isApprover(currentUser.email)
+  const { user } = useAuth()
+  const currentUser = user
+  const userIsApprover = !!user?.isApprover
 
   const [bookings, setBookings] = useState(() => {
     const normalized = SEED_BOOKINGS.map(b => ({
@@ -162,16 +155,6 @@ export default function Approvals() {
   // ── render ──
   return (
     <div className="approvals">
-
-      {/* Demo user picker — remove when real auth lands */}
-      <div className="approvals-demo-bar">
-        <span>⚠ Demo mode — viewing as:</span>
-        <select value={demoIdx} onChange={e => { setDemoIdx(+e.target.value); setRejectingId(null) }}>
-          {DEMO_USERS.map((u, i) => (
-            <option key={u.email} value={i}>{u.name} ({u.role})</option>
-          ))}
-        </select>
-      </div>
 
       {/* Status filter tabs */}
       <div className="approval-filters">
