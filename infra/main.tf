@@ -37,7 +37,7 @@ resource "aws_security_group" "app" {
   }
 
   egress {
-    description = "All egress (git clone, image pulls, Let's Encrypt, SSM)"
+    description = "All egress (git clone, image pulls, SSM, etc.)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
