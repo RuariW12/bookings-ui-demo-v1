@@ -115,10 +115,6 @@ export default function Login() {
           ))}
         </div>
 
-        <p style={{ fontSize: '0.72rem', color: MUTED, lineHeight: 1.5, margin: '14px 4px 0' }}>
-          Demo: this checks the email domain. The real version swaps this screen for
-          Microsoft sign-in behind the same boundary — the rest of the app is unchanged.
-        </p>
       </div>
     </div>
   )
