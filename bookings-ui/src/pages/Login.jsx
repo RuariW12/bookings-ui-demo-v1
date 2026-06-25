@@ -21,7 +21,7 @@ const INK = '#242424'
 const MUTED = '#605e5c'
 const BORDER = '#d7d5d2'
 const HAIRLINE = '#e6e4e2'
-const ACCENT = '#1b3a5b'      // deep slate-blue: primary action
+const ACCENT = '#e35205'      
 const SURFACE = '#f3f2f1'
 
 export default function Login() {
