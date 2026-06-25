@@ -1,0 +1,41 @@
+# Reads .env (written by the EC2 boot script from SSM) for substitution below.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_ENTRA_CLIENT_ID: ${VITE_ENTRA_CLIENT_ID}
+        VITE_ENTRA_TENANT_ID: ${VITE_ENTRA_TENANT_ID}
+        VITE_REDIRECT_URI: ${VITE_REDIRECT_URI}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - caddy_data:/data # persists Let's Encrypt certs across rebuilds
+      - caddy_config:/config
+    depends_on:
+      - db
+
+  # Present for when the backend proxy lands. The static SPA does NOT connect to
+  # it yet (data is still mocked), so today it just sits idle holding a volume.
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No host port — only reachable by other containers on the Compose network.
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pgdata:
