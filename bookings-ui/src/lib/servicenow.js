@@ -76,6 +76,15 @@ export async function searchCompanies(query) {
     .map((c) => ({ cid: c.cid, name: c.name }))
 }
 
+// Returns [{ cid, name }] for every company, name-sorted — used to populate the
+// company dropdown without making the user type first. Real version: GET the
+// account table (paged); for a large CMDB, swap a debounced typeahead back in.
+export async function listCompanies() {
+  return SNOW_COMPANIES
+    .map((c) => ({ cid: c.cid, name: c.name }))
+    .sort((a, b) => a.name.localeCompare(b.name))
+}
+
 // Returns the full company record (with environments) for a CID, or null.
 // Real version: GET the company, then its related CMDB environment CIs.
 export async function getCompany(cid) {
