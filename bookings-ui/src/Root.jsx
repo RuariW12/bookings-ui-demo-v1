@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import App from './pages/App'          // booking form (just the fields)
 import Schedule from './pages/Schedule'
 import Approvals from './pages/approvals'
@@ -10,6 +10,10 @@ import './pages/App.css'
 export default function Root() {
   const { user, isAuthenticated, signOut } = useAuth()
   const [tab, setTab] = useState("book")  // "book" | "schedule" | "approvals"
+
+  useEffect(() => {
+    if (user) setTab(user.isApprover ? "approvals" : "book")
+  }, [user])
 
   // Gate: nothing renders until you've signed in.
   if (!isAuthenticated) return <Login />
