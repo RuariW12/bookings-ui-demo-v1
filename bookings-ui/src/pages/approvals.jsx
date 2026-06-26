@@ -3,6 +3,7 @@
 import { useState, useMemo, Fragment } from 'react'
 import { SEED_BOOKINGS } from '../lib/bookings'
 import { useAuth } from '../lib/auth'
+import { canApproveRegion } from '../lib/approvers'
 import './approvals.css'
 
 // ── extra seed entries that are pending approval (demo data) ──
@@ -98,6 +99,11 @@ export default function Approvals() {
   const { user } = useAuth()
   const currentUser = user
   const userIsApprover = !!user?.isApprover
+  const approverRegions = user?.approverRegions ?? []
+
+  // An approver can act on a booking only if its region is in their scope.
+  // Wildcard '*' (all regions) is handled inside canApproveRegion.
+  const canActOn = (b) => userIsApprover && canApproveRegion(user.email, b.region)
 
   const [bookings, setBookings] = useState(() => {
     const normalized = SEED_BOOKINGS.map(b => ({
@@ -133,6 +139,8 @@ export default function Approvals() {
 
   // ── actions ──
   function handleApprove(id) {
+    const target = bookings.find(b => b.id === id)
+    if (!target || !canActOn(target)) return
     setBookings(prev => prev.map(b =>
       b.id === id
         ? { ...b, status: 'approved', approvedBy: currentUser.email, approvedAt: new Date().toISOString() }
@@ -142,6 +150,8 @@ export default function Approvals() {
   }
 
   function handleReject(id) {
+    const target = bookings.find(b => b.id === id)
+    if (!target || !canActOn(target)) return
     setBookings(prev => prev.map(b =>
       b.id === id
         ? { ...b, status: 'rejected', rejectedBy: currentUser.email, rejectedAt: new Date().toISOString(), rejectionReason: rejectReason }
@@ -169,6 +179,12 @@ export default function Approvals() {
           </button>
         ))}
       </div>
+
+      {userIsApprover && (
+        <div className="meta-text" style={{ margin: '4px 2px 10px' }}>
+          Approving for: <strong>{approverRegions.includes('*') ? 'all regions' : (approverRegions.join(', ') || '—')}</strong>
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="approvals-empty">
@@ -221,17 +237,23 @@ export default function Approvals() {
                   {userIsApprover && (
                     <td className="col-actions" onClick={e => e.stopPropagation()}>
                       {b.status === 'pending' ? (
-                        <div className="approval-actions">
-                          <button className="btn-approve" onClick={() => handleApprove(b.id)}>Approve</button>
-                          <button className="btn-reject" onClick={() => setRejectingId(rejectingId === b.id ? null : b.id)}>Reject</button>
-                        </div>
+                        canActOn(b) ? (
+                          <div className="approval-actions">
+                            <button className="btn-approve" onClick={() => handleApprove(b.id)}>Approve</button>
+                            <button className="btn-reject" onClick={() => setRejectingId(rejectingId === b.id ? null : b.id)}>Reject</button>
+                          </div>
+                        ) : (
+                          <span className="meta-text" title={'You can only approve: ' + (approverRegions.includes('*') ? 'all regions' : approverRegions.join(', '))}>
+                            {b.region} — outside your region
+                          </span>
+                        )
                       ) : (
                         <span className="meta-text">
                           {b.approvedBy && <>Approved by {b.approvedBy.split('@')[0].replace('.', ' ')}</>}
                           {b.rejectedBy && <>Rejected by {b.rejectedBy.split('@')[0].replace('.', ' ')}</>}
                         </span>
                       )}
-                      {rejectingId === b.id && (
+                      {rejectingId === b.id && canActOn(b) && (
                         <div className="reject-form">
                           <input
                             type="text"
