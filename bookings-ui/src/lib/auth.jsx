@@ -1,8 +1,7 @@
 // auth.jsx — swappable auth boundary.
-//
 
 import { createContext, useContext, useState } from 'react'
-import { isApprover } from './approvers'
+import { isApprover, approverRegions } from './approvers'
 
 const AuthContext = createContext(null)
 
@@ -19,6 +18,7 @@ export function AuthProvider({ children }) {
         email: email.toLowerCase(),
         name,
         isApprover: isApprover(email),
+        approverRegions: approverRegions(email),
       }),
     signOut: () => setUser(null),
   }
