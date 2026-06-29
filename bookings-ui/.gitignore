@@ -26,4 +26,7 @@ dist-ssr
 
 .env
 
+
+# Email list (to be changed to postgres)
 emails.txt
+userConfig.js
