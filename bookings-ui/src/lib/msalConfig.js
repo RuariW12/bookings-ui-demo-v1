@@ -13,7 +13,17 @@ const msalConfig = {
 }
 
 export const loginRequest = {
-  scopes: ['User.Read'],
+  scopes: ['User.Read', 'Mail.Send'],
 }
 
 export const msalInstance = new PublicClientApplication(msalConfig)
+
+export async function getGraphToken() {
+  const account = msalInstance.getAllAccounts()[0]
+  if (!account) throw new Error('No signed-in account')
+  const result = await msalInstance.acquireTokenSilent({
+    scopes: ['Mail.Send'],
+    account,
+  })
+  return result.accessToken
+}

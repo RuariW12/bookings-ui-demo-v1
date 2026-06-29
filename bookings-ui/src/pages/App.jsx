@@ -3,6 +3,7 @@ import './App.css'
 import { REGIONS, SEED_BOOKINGS } from '../lib/bookings'
 import { getCompany, activeEnvironments, listCompanies } from '../lib/servicenow'
 import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
+import { notifyApproversForBooking } from '../lib/notifications'
 
 const OPERATION_TYPES = {
   build: {
@@ -335,7 +336,7 @@ function App() {
 
   const FLOW_URL = import.meta.env.VITE_FLOW_URL
 
-  const handleBook = async () => {
+    const handleBook = async () => {
     const payload = {
       operationType,
       operationLabel: cfg?.label || "",
@@ -355,6 +356,16 @@ function App() {
 
     console.log("Booking payload:", payload)
 
+    // Notify approvers on submit. Independent of the Power Automate flow,
+    // which is blocked by tenant OAuth policy — stubbed sends log to console.
+    notifyApproversForBooking({
+      ...payload,
+      title: payload.companyName || payload.operationLabel,
+      start: payload.date || payload.buildWindowStart,
+      end: payload.date || payload.buildWindowEnd,
+      submittedBy: payload.csmEmail,
+    })
+
     try {
       const res = await fetch(FLOW_URL, {
         method: "POST",
@@ -364,7 +375,7 @@ function App() {
       if (res.ok) alert("Booking sent!")
       else alert("Flow responded with status " + res.status)
     } catch (err) {
-      alert("Couldn't reach the flow (likely CORS from localhost — check the console; the payload still logged).")
+      alert("Booking submitted (notification logged). Flow unreachable — see console.")
       console.error(err)
     }
   }

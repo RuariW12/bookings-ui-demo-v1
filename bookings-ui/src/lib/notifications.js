@@ -1,6 +1,7 @@
 // notifications.js — approval reminders via Microsoft Graph.
 // Stubbed for now; flip SEND_LIVE once Graph access + a Teams webhook land.
 import { approversForRegion } from './userConfig'
+import { getGraphToken} from './msalConfig'
 
 const SEND_LIVE = false
 const TEAMS_WEBHOOK_URL = '' // paste Incoming Webhook URL when available
@@ -47,11 +48,16 @@ function buildTeamsCard(booking) {
   }
 }
 
+
 async function sendEmail(payload) {
   if (!SEND_LIVE) { console.log('[stub] Outlook email →', payload); return { ok: true, stub: true } }
+  const token = await getGraphToken()
   const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' /* Authorization added when Graph token wired */ },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify(payload),
   })
   return { ok: res.ok }
