@@ -95,14 +95,14 @@ function formatTimestamp(iso) {
 
 export default function Approvals() {
   // ── state ──
-  const { user } = useAuth()
+  const { user, canApproveRegion } = useAuth()
   const currentUser = user
   const userIsApprover = !!user?.isApprover
   const approverRegions = user?.approverRegions ?? []
 
   // An approver can act on a booking only if its region is in their scope.
   // Wildcard '*' (all regions) is handled inside canApproveRegion.
-  const canActOn = (b) => userIsApprover && canApproveRegion(user.email, b.region)
+const canActOn = (b) => userIsApprover && canApproveRegion(b.region)
 
   const [bookings, setBookings] = useState(() => {
     const normalized = SEED_BOOKINGS.map(b => ({
