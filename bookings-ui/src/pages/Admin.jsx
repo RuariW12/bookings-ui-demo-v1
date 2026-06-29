@@ -57,7 +57,7 @@ export default function Admin() {
   const btn = { padding: '5px 10px', fontSize: '0.78rem', borderRadius: 5, cursor: 'pointer', border: `1px solid ${BORDER}`, background: '#fff', color: INK }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 900, margin: '0 auto', paddingTop: 24 }}>
       <h2 style={{ fontSize: '1.1rem', color: INK, margin: '0 0 4px' }}>User administration</h2>
       <p style={{ fontSize: '0.85rem', color: MUTED, margin: '0 0 18px' }}>
         Manage approvers and requesters. Admins are seeded and shown read-only.
