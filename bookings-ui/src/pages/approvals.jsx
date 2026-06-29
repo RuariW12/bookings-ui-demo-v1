@@ -3,7 +3,6 @@
 import { useState, useMemo, Fragment } from 'react'
 import { SEED_BOOKINGS } from '../lib/bookings'
 import { useAuth } from '../lib/auth'
-import { canApproveRegion } from '../lib/approvers'
 import './approvals.css'
 
 // ── extra seed entries that are pending approval (demo data) ──
