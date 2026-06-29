@@ -1,7 +1,6 @@
 // auth.jsx — swappable auth boundary.
-
 import { createContext, useContext, useState } from 'react'
-import { isApprover, approverRegions } from './approvers'
+import { resolveUser, canApproveRegion } from './userConfig'
 
 const AuthContext = createContext(null)
 
@@ -11,16 +10,21 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     isAuthenticated: !!user,
-    // name is supplied by the caller for the demo logins; a real provider
-    // would read it off the token.
-    signIn: (email, name) =>
+    signIn: (email, name) => {
+      const resolved = resolveUser(email)
+      if (!resolved) return false
       setUser({
         email: email.toLowerCase(),
         name,
-        isApprover: isApprover(email),
-        approverRegions: approverRegions(email),
-      }),
+        role: resolved.role,
+        isApprover: resolved.role === 'approver',
+        approverRegions: resolved.regions,
+      })
+      return true
+    },
     signOut: () => setUser(null),
+    canApproveRegion: (region) =>
+      user ? canApproveRegion(user.email, region) : false,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
