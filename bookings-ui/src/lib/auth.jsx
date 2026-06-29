@@ -17,6 +17,7 @@ export function AuthProvider({ children }) {
       email: email.toLowerCase(),
       name,
       role: resolved.role,
+      isAdmin: resolved.role === 'admin',
       isApprover: resolved.role === 'approver',
       approverRegions: resolved.regions,
     })
