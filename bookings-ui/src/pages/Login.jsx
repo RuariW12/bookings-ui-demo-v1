@@ -27,7 +27,7 @@ export default function Login() {
       if (!recognized) setError('Your account is not authorized for this app.')
     } catch (e) {
       if (e.errorCode === 'user_cancelled') return
-      setError('Sign-in failed. Try again or contact IT.')
+      setError('Sign-in failed. Please try again.')
     } finally {
       setLoading(false)
     }
