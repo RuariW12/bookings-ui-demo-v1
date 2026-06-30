@@ -1,98 +1,40 @@
 // serviceNow.js
-// Mock of the ServiceNow CMDB lookups the booking form needs.
+// Lookups hit the backend, which proxies ServiceNow server-side.
 
-export const SNOW_COMPANIES = [
-  {
-    cid: "C560",
-    name: "Northwind Trading Co.",
-    entitlement: "ENT-560-PLATINUM",
-    environments: [
-      { environmentId: "ENV-560-PRD", environment: "PROD", tier: "prod_large", hostRegion: "CLD-EMEA", status: "active" },
-      { environmentId: "ENV-560-QA",  environment: "QA",   tier: "lower",      hostRegion: "CLD-EMEA", status: "active" },
-      { environmentId: "ENV-560-DEV", environment: "DEV",  tier: "lower",      hostRegion: "CLD-EMEA", status: "decommissioned" },
-    ],
-  },
-  {
-    cid: "C689",
-    name: "Contoso Logistics",
-    entitlement: "ENT-689-GOLD",
-    environments: [
-      // host region varies per environment — this is the seed for the safe-harbour check later.
-      { environmentId: "ENV-689-PRD", environment: "PROD", tier: "prod_large", hostRegion: "CLD-EMEA", status: "active" },
-      { environmentId: "ENV-689-UAT", environment: "UAT",  tier: "lower",      hostRegion: "CLD-CTC",  status: "active" },
-      { environmentId: "ENV-689-QA",  environment: "QA",   tier: "lower",      hostRegion: "CLD-CTC",  status: "active" },
-    ],
-  },
-  {
-    cid: "C802",
-    name: "Fabrikam Health",
-    entitlement: "ENT-802-PLATINUM",
-    environments: [
-      { environmentId: "ENV-802-PRD", environment: "PROD", tier: "prod_large", hostRegion: "CLD-HQ", status: "active" },
-      { environmentId: "ENV-802-DEV", environment: "DEV",  tier: "lower",      hostRegion: "CLD-HQ", status: "active" },
-      // missing tier — record came in incomplete. Form leaves the tier select on its default.
-      { environmentId: "ENV-802-SBX", environment: "SBX",  tier: null,         hostRegion: "CLD-HQ", status: "active" },
-    ],
-  },
-  {
-    cid: "C757",
-    name: "Tailspin Media",
-    entitlement: "ENT-757-SILVER",
-    environments: [
-      { environmentId: "ENV-757-PRD", environment: "PROD", tier: "prod_large", hostRegion: "CLD-HQ", status: "active" },
-      { environmentId: "ENV-757-DEV", environment: "DEV",  tier: "lower",      hostRegion: "CLD-HQ", status: "active" },
-    ],
-  },
-  {
-    cid: "C701",
-    name: "Adventure Works",
-    entitlement: "ENT-701-GOLD",
-    environments: [
-      { environmentId: "ENV-701-PRD", environment: "PROD", tier: "prod_large", hostRegion: "CLD-CTC", status: "active" },
-      { environmentId: "ENV-701-DR",  environment: "DR",   tier: "prod_large", hostRegion: "CLD-CTC", status: "active" },
-      { environmentId: "ENV-701-UAT", environment: "UAT",  tier: "lower",      hostRegion: "CLD-CTC", status: "decommissioned" },
-    ],
-  },
-  {
-    cid: "C702",
-    name: "Wingtip Finance",
-    entitlement: "ENT-702-SILVER",
-    environments: [
-      { environmentId: "ENV-702-PRD", environment: "PROD", tier: "prod_large", hostRegion: "CLD-CTC", status: "active" },
-      { environmentId: "ENV-702-SBX", environment: "SBX",  tier: "lower",      hostRegion: "CLD-CTC", status: "active" },
-    ],
-  },
-]
+// Fetches the full company list once. The combobox filters this client-side,
+// per the design (no backend search-by-fragment endpoint).
+async function fetchAllCompanies() {
+  const res = await fetch('/api/companies')
+  if (!res.ok) throw new Error('Failed to load companies')
+  return await res.json() // [{ cid, name }]
+}
 
-// --- lookup API (swap bodies for real SNOW calls when OAuth lands) ---------
-
-// Returns [{ cid, name }] for companies matching a name or CID fragment.
-// Real version: GET the company/account table with a name/number query.
+// Returns [{ cid, name }] matching a name or CID fragment.
 export async function searchCompanies(query) {
   const q = query.trim().toLowerCase()
   if (!q) return []
-  return SNOW_COMPANIES
-    .filter((c) => c.name.toLowerCase().includes(q) || c.cid.toLowerCase().includes(q))
-    .map((c) => ({ cid: c.cid, name: c.name }))
+  const companies = await fetchAllCompanies()
+  return companies.filter(
+    (c) => c.name.toLowerCase().includes(q) || c.cid.toLowerCase().includes(q)
+  )
 }
 
-// Returns [{ cid, name }] for every company, name-sorted — used to populate the
-// company dropdown without making the user type first. Real version: GET the
-// account table (paged); for a large CMDB, swap a debounced typeahead back in.
+// Returns [{ cid, name }] for every company, name-sorted.
 export async function listCompanies() {
-  return SNOW_COMPANIES
-    .map((c) => ({ cid: c.cid, name: c.name }))
-    .sort((a, b) => a.name.localeCompare(b.name))
+  const companies = await fetchAllCompanies()
+  return companies.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 // Returns the full company record (with environments) for a CID, or null.
-// Real version: GET the company, then its related CMDB environment CIs.
 export async function getCompany(cid) {
-  return SNOW_COMPANIES.find((c) => c.cid === cid) ?? null
+  const res = await fetch(`/api/companies/${encodeURIComponent(cid)}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('Failed to load company')
+  return await res.json() // { cid, name, environments: [...] }
 }
 
 // The "what you see" list — active environments only.
 export function activeEnvironments(company) {
   if (!company) return []
-  return company.environments.filter((e) => e.status === "active")
+  return company.environments.filter((e) => e.status === 'active')
 }
