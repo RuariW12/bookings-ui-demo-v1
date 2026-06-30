@@ -1,59 +1,86 @@
 // userStore.js — user & role management.
-// In-memory mock seeded from current identities. Async-shaped so real backend
-// calls (Postgres via an admin endpoint) swap in behind this same interface.
+// Talks to the backend user API. Same interface as the old mock so Admin.jsx
+// is unchanged; snake_case ↔ camelCase mapping and email→id resolution happen here.
 
 export const REGIONS = ['CLD-HQ', 'CLD-CTC', 'CLD-EMEA']
 
-// Admins are seeded here and NOT manageable through the UI — the admin set is
-// deliberately hard to expand. One per region. Replace with real identities.
-const SEED = [
-  { email: 'rwhalen@strategy.com',       role: 'admin',     regions: ['CLD-HQ'],   displayName: 'Ruari Whalen',    active: true, seeded: true },
-  { email: 'admin.ctc@strategy.com',     role: 'admin',     regions: ['CLD-CTC'],  displayName: 'CTC Admin',       active: true, seeded: true },
-  { email: 'admin.emea@strategy.com',    role: 'admin',     regions: ['CLD-EMEA'], displayName: 'EMEA Admin',      active: true, seeded: true },
-  { email: 'hqmanager1@strategy.com',    role: 'approver',  regions: ['CLD-HQ'],   displayName: 'HQ Manager 1',    active: true },
-  { email: 'emeaapprover1@strategy.com', role: 'approver',  regions: ['CLD-EMEA'], displayName: 'EMEA Approver 1', active: true },
-  { email: 'csm1@strategy.com',          role: 'requester', regions: [],           displayName: 'CSM One',         active: true },
-]
+// Backend UserOut (snake_case) → UI shape (camelCase).
+function toUI(u) {
+  return {
+    id: u.id,
+    email: u.email,
+    role: u.role,
+    regions: u.regions ?? [],
+    displayName: u.display_name ?? '',
+    active: u.active,
+    seeded: u.seeded,
+  }
+}
 
-let users = SEED.map((u) => ({ ...u, regions: [...u.regions] }))
-
-const clone = (u) => ({ ...u, regions: [...u.regions] })
-const activeAdmins = () => users.filter((u) => u.role === 'admin' && u.active)
+// Surface the backend's error detail so Admin.jsx's catch shows a useful message.
+async function readError(res) {
+  try {
+    const body = await res.json()
+    return body.detail || `Request failed (${res.status})`
+  } catch {
+    return `Request failed (${res.status})`
+  }
+}
 
 export async function listUsers() {
-  return users.map(clone)
+  const res = await fetch('/api/users')
+  if (!res.ok) throw new Error(await readError(res))
+  const data = await res.json()
+  return data.map(toUI)
+}
+
+// The backend PATCH route is keyed by integer id; the UI keys by email.
+async function idForEmail(email) {
+  const key = (email || '').toLowerCase()
+  const users = await listUsers()
+  const match = users.find((u) => u.email.toLowerCase() === key)
+  if (!match) throw new Error('User not found.')
+  return match.id
 }
 
 export async function addUser({ email, role, regions = [], displayName = '' }) {
-  const key = (email || '').toLowerCase().trim()
-  if (!key || !key.includes('@')) throw new Error('A valid email is required.')
-  if (role === 'admin') throw new Error('Admins are seeded, not added through the UI.')
-  if (role !== 'approver' && role !== 'requester') throw new Error('Invalid role.')
-  if (users.some((u) => u.email === key)) throw new Error('That email already exists.')
-  if (role === 'approver' && regions.length === 0) throw new Error('An approver needs at least one region.')
-  const user = { email: key, role, regions: role === 'requester' ? [] : [...regions], displayName, active: true }
-  users.push(user)
-  return clone(user)
+  const res = await fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      email: (email || '').toLowerCase().trim(),
+      display_name: displayName,
+      role,
+      regions: role === 'requester' ? [] : regions,
+    }),
+  })
+  if (!res.ok) throw new Error(await readError(res))
+  return toUI(await res.json())
 }
 
 export async function updateUser(email, patch) {
-  const key = (email || '').toLowerCase()
-  const user = users.find((u) => u.email === key)
-  if (!user) throw new Error('User not found.')
-  if (user.seeded) throw new Error('Seeded admins cannot be edited through the UI.')
-  if (patch.role === 'admin') throw new Error('Cannot promote to admin through the UI.')
-  Object.assign(user, patch)
-  if (user.role === 'requester') user.regions = []
-  return clone(user)
+  const id = await idForEmail(email)
+  const body = {}
+  if (patch.displayName !== undefined) body.display_name = patch.displayName
+  if (patch.role !== undefined) body.role = patch.role
+  if (patch.regions !== undefined) body.regions = patch.regions
+  if (patch.active !== undefined) body.active = patch.active
+  const res = await fetch(`/api/users/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await readError(res))
+  return toUI(await res.json())
 }
 
 export async function setActive(email, active) {
-  const key = (email || '').toLowerCase()
-  const user = users.find((u) => u.email === key)
-  if (!user) throw new Error('User not found.')
-  if (user.seeded) throw new Error('Seeded admins cannot be deactivated through the UI.')
-  if (!active && user.role === 'admin' && activeAdmins().length <= 1)
-    throw new Error('Cannot deactivate the last active admin.')
-  user.active = active
-  return clone(user)
+  const id = await idForEmail(email)
+  const res = await fetch(`/api/users/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active }),
+  })
+  if (!res.ok) throw new Error(await readError(res))
+  return toUI(await res.json())
 }
