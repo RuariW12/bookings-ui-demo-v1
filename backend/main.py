@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from database import get_pool, close_pool
 from schema import init_schema
 from routers import users
+from routers import users, bookings
 
 
 @asynccontextmanager
@@ -15,6 +16,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Bookings API", lifespan=lifespan)
 app.include_router(users.router)
+app.include_router(bookings.router)
 
 
 @app.get("/api/health")
