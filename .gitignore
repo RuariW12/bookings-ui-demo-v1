@@ -6,3 +6,9 @@
 !*.tfvars.example
 crash.log
 crash.*.log
+
+# Python / FastAPI backend
+backend/.venv/
+__pycache__/
+*.pyc
+.env
