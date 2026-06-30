@@ -366,16 +366,36 @@ function App() {
       submittedBy: payload.csmEmail,
     })
 
+    const bookingBody = {
+      operation_type: operationType,
+      region,
+      scheduled_date: operationType === "build"
+        ? payload.buildWindowStart
+        : payload.date,
+      scheduled_time: payload.startTime ?? "",
+      company_name: payload.companyName,
+      company_id: cid || null,
+      environment_id: environmentId || null,
+      environment_name: environment || null,
+      host_region: payload.hostRegion,
+      notes: privateNotes || null,
+      requester_email: csmEmail || null,
+      requester_name: bookerName || null,
+    }
+
     try {
-      const res = await fetch(FLOW_URL, {
+      const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(bookingBody),
       })
-      if (res.ok) alert("Booking sent!")
-      else alert("Flow responded with status " + res.status)
+      if (res.ok) {
+        alert("Booking saved!")
+      } else {
+        alert("Server responded with status " + res.status)
+      }
     } catch (err) {
-      alert("Booking submitted (notification logged). Flow unreachable — see console.")
+      alert("Booking submitted (notification logged). Backend unreachable — see console.")
       console.error(err)
     }
   }
