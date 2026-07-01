@@ -153,10 +153,26 @@ export default function Schedule() {
     return [...REGIONS, ...(hasNull ? ["__none"] : [])]
   }, [bookings])
 
-  // Local-only until a backend PATCH/cancel route exists; changes here do not
-  // persist across a refresh.
-  const updateBooking = (id, patch) =>
-    setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } : b)))
+  // Persist an edit to the backend, then re-fetch so the timeline reflects
+  // exactly what was saved. `patch` uses backend (snake_case) field names.
+  const patchBooking = async (id, patch) => {
+    setError('')
+    try {
+      const res = await fetch(`/api/bookings/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) {
+        let detail = `Save failed (${res.status})`
+        try { detail = (await res.json()).detail || detail } catch {}
+        throw new Error(detail)
+      }
+      await refresh()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
 
   return (
     <div className="sched">
@@ -267,9 +283,9 @@ export default function Schedule() {
         <DetailModal
           key={selected.id}
           b={selected}
-          onSave={(patch) => updateBooking(selected.id, patch)}
-          onCancelBooking={() => updateBooking(selected.id, { status: "cancelled" })}
-          onRestore={() => updateBooking(selected.id, { status: "pending" })}
+          onSave={(patch) => patchBooking(selected.id, patch)}
+          onCancelBooking={() => patchBooking(selected.id, { status: "cancelled" })}
+          onRestore={() => patchBooking(selected.id, { status: "pending" })}
           onClose={() => setSelectedId(null)}
         />
       )}
@@ -285,7 +301,6 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
   const [start, setStart] = useState(b.start)
   const [end, setEnd] = useState(b.end)
   const [startTime, setStartTime] = useState(b.startTime || "")
-  const [status, setStatus] = useState(b.status)
   const [notes, setNotes] = useState(b.privateNotes || "")
   const [region, setRegion] = useState(b.region)
 
@@ -309,9 +324,14 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
   }
 
   const save = () => {
+    // Map the modal's UI fields back to backend column names. Build end is
+    // derived from the start on render, so only scheduled_date is sent.
     onSave({
-      title, start, end, status, privateNotes: notes, region,
-      ...(pickTime ? { startTime, endTime } : {}),
+      company_name: title,
+      scheduled_date: start,
+      region: region || null,
+      notes: notes || null,
+      ...(pickTime ? { scheduled_time: startTime } : {}),
     })
     onClose()
   }
@@ -322,7 +342,7 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
         <div className="sched-modal-head">
           <div>
             <h3>{b.operationLabel}</h3>
-            <span className={`pill ${status}`}>{status}</span>
+            <span className={`pill ${b.status}`}>{b.status}</span>
           </div>
           <button className="sched-x" aria-label="Close" onClick={onClose}>×</button>
         </div>
@@ -379,14 +399,6 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
           </div>
 
           <div className="alloc-field">
-            <label>Status</label>
-            <div className="alloc-pills">
-              <button type="button" className={status === "pending" ? "on" : ""} onClick={() => setStatus("pending")}>Pending</button>
-              <button type="button" className={status === "approved" ? "on" : ""} onClick={() => setStatus("approved")}>Approved</button>
-            </div>
-          </div>
-
-          <div className="alloc-field">
             <label>Notes</label>
             <textarea
               className="alloc-box"
@@ -411,7 +423,7 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
           <button className="btn-update" onClick={save}>Update</button>
           <button className="btn-light" onClick={onClose}>Cancel</button>
           <span className="spacer" />
-          {status === "cancelled"
+          {b.status === "cancelled"
             ? <button className="btn-link ok" onClick={() => { onRestore(); onClose() }}>Restore booking</button>
             : <button className="btn-link danger" onClick={() => { onCancelBooking(); onClose() }}>Cancel booking</button>}
         </div>
