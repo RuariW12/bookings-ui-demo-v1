@@ -1,7 +1,16 @@
 {$DOMAIN} {
-	root * /srv
-	encode gzip
-	try_files {path} /index.html
-	file_server
+	# API traffic goes to the FastAPI backend; the path is preserved (/api/...).
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else is the static SPA.
+	handle {
+		root * /srv
+		encode gzip
+		try_files {path} /index.html
+		file_server
+	}
+
 	tls {$ACME_EMAIL}
 }
