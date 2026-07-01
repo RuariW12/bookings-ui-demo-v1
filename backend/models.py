@@ -43,6 +43,21 @@ class BookingCreate(BaseModel):
     requester_name: str | None = None
 
 
+class BookingUpdate(BaseModel):
+    # General edit for the schedule view. Approval is NOT handled here — it stays
+    # on the region-guarded approve endpoint. Status here covers cancel/restore.
+    region: str | None = None
+    scheduled_date: str | None = None
+    scheduled_time: str | None = None
+    company_name: str | None = None
+    company_id: str | None = None
+    environment_id: str | None = None
+    environment_name: str | None = None
+    host_region: str | None = None
+    notes: str | None = None
+    status: str | None = None  # pending | cancelled
+
+
 class BookingOut(BaseModel):
     id: int
     operation_type: str
@@ -63,3 +78,18 @@ class BookingOut(BaseModel):
     servicenow_case_id: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class CompanySearch(BaseModel):
+    query: str
+
+
+class CaseCreate(BaseModel):
+    short_description: str
+    description: str | None = None
+    account: str            # customer_account.sys_id
+    u_dsi: str              # u_cmdb_ci_dsi.sys_id
+    u_environment: str      # "DEV" | "PROD"
+    u_product_version: str
+    u_severity: str         # e.g. "Sev 3"
+    priority: str           # e.g. "3"
