@@ -1,6 +1,6 @@
 // userStore.js — user & role management.
-// Talks to the backend user API. Same interface as the old mock so Admin.jsx
-// is unchanged; snake_case ↔ camelCase mapping and email→id resolution happen here.
+// Talks to the backend user API. Every mutating call carries the acting admin's
+// email (actorEmail) so the backend can enforce region-bounded scope.
 
 export const REGIONS = ['CLD-HQ', 'CLD-CTC', 'CLD-EMEA']
 
@@ -43,8 +43,9 @@ async function idForEmail(email) {
   return match.id
 }
 
-export async function addUser({ email, role, regions = [], displayName = '' }) {
-  const res = await fetch('/api/users', {
+export async function addUser({ email, role, regions = [], displayName = '' }, actorEmail) {
+  const q = new URLSearchParams({ actor_email: actorEmail || '' })
+  const res = await fetch(`/api/users?${q}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -58,14 +59,15 @@ export async function addUser({ email, role, regions = [], displayName = '' }) {
   return toUI(await res.json())
 }
 
-export async function updateUser(email, patch) {
+export async function updateUser(email, patch, actorEmail) {
   const id = await idForEmail(email)
   const body = {}
   if (patch.displayName !== undefined) body.display_name = patch.displayName
   if (patch.role !== undefined) body.role = patch.role
   if (patch.regions !== undefined) body.regions = patch.regions
   if (patch.active !== undefined) body.active = patch.active
-  const res = await fetch(`/api/users/${id}`, {
+  const q = new URLSearchParams({ actor_email: actorEmail || '' })
+  const res = await fetch(`/api/users/${id}?${q}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -74,9 +76,10 @@ export async function updateUser(email, patch) {
   return toUI(await res.json())
 }
 
-export async function setActive(email, active) {
+export async function setActive(email, active, actorEmail) {
   const id = await idForEmail(email)
-  const res = await fetch(`/api/users/${id}`, {
+  const q = new URLSearchParams({ actor_email: actorEmail || '' })
+  const res = await fetch(`/api/users/${id}?${q}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ active }),
