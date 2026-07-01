@@ -1,8 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import './Schedule.css'
-import { REGIONS, SEED_BOOKINGS, REGION_BUILD_CAPACITY, REGION_SLOTS } from '../lib/bookings.js'
+import { REGIONS, REGION_BUILD_CAPACITY, REGION_SLOTS } from '../lib/bookings.js'
 import { OPERATING_HOURS } from '../lib/operatingHours'
-import { notifyApproversForBooking } from '../lib/notifications'
 
 const NUM_DAYS = 14
 const LANE_H = 58
@@ -46,6 +45,50 @@ function computeEndTime(startLabel, hours) {
   return `${((eh + 11) % 12) + 1}:${String(em).padStart(2, "0")} ${eh >= 12 ? "PM" : "AM"}${nextDay ? " (+1d)" : ""}`
 }
 
+// nth business day (inclusive) forward from a start ISO date.
+function nthBusinessDay(startISO, n) {
+  let d = parseISO(startISO)
+  let count = 0
+  while (count < n) {
+    if (!isWeekend(d)) count++
+    if (count < n) d = addDays(d, 1)
+  }
+  return fmtISO(d)
+}
+
+// Backend stores only scheduled_date; end/duration/label are derived here from
+// operation type, mirroring the booking form's rules. Refresh duration assumes
+// 8h since tier isn't persisted on the booking record.
+const OP_META = {
+  build:   { label: 'Environment Build', spanBusinessDays: 5, hours: 40 },
+  refresh: { label: 'MD Refresh',        spanBusinessDays: 1, hours: 8 },
+  cutover: { label: 'Cutover',           spanBusinessDays: 1, hours: 2 },
+}
+
+// Backend booking (snake_case) -> the shape this timeline renders.
+function toUI(b) {
+  const meta = OP_META[b.operation_type] || { label: b.operation_type, spanBusinessDays: 1, hours: 0 }
+  const start = b.scheduled_date
+  const end = b.operation_type === 'build' ? nthBusinessDay(start, meta.spanBusinessDays) : start
+  return {
+    id: b.id,
+    operationType: b.operation_type,
+    operationLabel: meta.label,
+    title: b.company_name || meta.label,
+    cid: b.company_id || '',
+    environment: b.environment_name || '',
+    region: b.region,
+    start,
+    end,
+    startTime: b.scheduled_time || '',
+    endTime: '',
+    durationHours: meta.hours,
+    status: b.status,
+    privateNotes: b.notes || '',
+    bookerName: b.requester_name || '',
+  }
+}
+
 // Greedy lane assignment so overlapping bookings in a region stack instead of collide.
 function assignLanes(items) {
   const laneEnds = []
@@ -57,7 +100,7 @@ function assignLanes(items) {
   })
 }
 
-// Most builds running on the same day within the visible window 
+// Most builds running on the same day within the visible window
 function peakConcurrentBuilds(builds, days) {
   let peak = 0
   for (const d of days) {
@@ -69,11 +112,28 @@ function peakConcurrentBuilds(builds, days) {
 }
 
 export default function Schedule() {
-  const [bookings, setBookings] = useState(SEED_BOOKINGS)
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [viewStart, setViewStart] = useState(() => sundayOf(new Date()))
   const [selectedId, setSelectedId] = useState(null)
 
   const selected = bookings.find((b) => b.id === selectedId) || null
+
+  async function refresh() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/bookings')
+      if (!res.ok) throw new Error(`Failed to load bookings (${res.status})`)
+      const data = await res.json()
+      setBookings(data.map(toUI))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { refresh() }, [])
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") setSelectedId(null) }
@@ -93,6 +153,8 @@ export default function Schedule() {
     return [...REGIONS, ...(hasNull ? ["__none"] : [])]
   }, [bookings])
 
+  // Local-only until a backend PATCH/cancel route exists; changes here do not
+  // persist across a refresh.
   const updateBooking = (id, patch) =>
     setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, ...patch } : b)))
 
@@ -113,6 +175,8 @@ export default function Schedule() {
         <span><i className="lg-cutover" />Cutover</span>
         <span style={{ marginLeft: "auto" }}>Dashed = pending · faded = cancelled</span>
       </div>
+
+      {error && <div className="sched-empty" style={{ color: '#c2410c' }}>{error}</div>}
 
       <div className="sched-scroll">
         <div className="sched-board">
@@ -197,7 +261,7 @@ export default function Schedule() {
         </div>
       </div>
 
-      {bookings.length === 0 && <div className="sched-empty">No bookings yet.</div>}
+      {!loading && bookings.length === 0 && <div className="sched-empty">No bookings yet.</div>}
 
       {selected && (
         <DetailModal
