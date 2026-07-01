@@ -1,12 +1,10 @@
 // Approvals.jsx
 
-import { useState, useMemo, Fragment } from 'react'
-import { SEED_BOOKINGS } from '../lib/bookings'
+import { useState, useMemo, useEffect, Fragment } from 'react'
 import { useAuth } from '../lib/auth'
 import './approvals.css'
 
-// ── extra seed entries that are pending approval (demo data) ──
-const PENDING_SEEDS = []
+const OP_LABELS = { build: 'Environment Build', refresh: 'MD Refresh', cutover: 'Cutover' }
 
 const STATUS_LABELS = {
   pending:   'Pending',
@@ -16,6 +14,44 @@ const STATUS_LABELS = {
 }
 
 const FILTERS = ['all', 'pending', 'approved', 'rejected', 'cancelled']
+
+// Backend booking (snake_case) → the shape this component renders.
+function toUI(b) {
+  return {
+    id: b.id,
+    operationType: b.operation_type,
+    operationLabel: OP_LABELS[b.operation_type] || b.operation_type,
+    title: b.company_name || '—',
+    cid: b.company_id || '',
+    region: b.region,
+    start: b.scheduled_date,
+    end: null,
+    startTime: b.scheduled_time || '',
+    endTime: '',
+    environment: b.environment_name || '',
+    environmentId: b.environment_id || '',
+    status: b.status,
+    submittedBy: b.requester_email || '',
+    submittedAt: b.created_at || '',
+    csm: b.requester_name || '',
+    csmEmail: b.requester_email || '',
+    notes: b.notes || '',
+    approvedBy: b.status === 'approved' ? (b.approved_by || '') : '',
+    approvedAt: b.status === 'approved' ? (b.approved_at || '') : '',
+    rejectedBy: b.status === 'rejected' ? (b.approved_by || '') : '',
+    rejectedAt: b.status === 'rejected' ? (b.approved_at || '') : '',
+    rejectionReason: '',
+  }
+}
+
+async function readError(res) {
+  try {
+    const body = await res.json()
+    return body.detail || `Request failed (${res.status})`
+  } catch {
+    return `Request failed (${res.status})`
+  }
+}
 
 function formatDate(iso) {
   if (!iso) return '—'
@@ -41,21 +77,31 @@ export default function Approvals() {
 
   // An approver can act on a booking only if its region is in their scope.
   // Wildcard '*' (all regions) is handled inside canApproveRegion.
-const canActOn = (b) => userIsApprover && canApproveRegion(b.region)
+  const canActOn = (b) => userIsApprover && canApproveRegion(b.region)
 
-  const [bookings, setBookings] = useState(() => {
-    const normalized = SEED_BOOKINGS.map(b => ({
-      ...b,
-      submittedBy: b.submittedBy || b.csmEmail || '',
-      submittedAt: b.submittedAt || '',
-    }))
-    return [...normalized, ...PENDING_SEEDS]
-  })
+  const [bookings, setBookings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   const [filter, setFilter] = useState('all')
   const [expanded, setExpanded] = useState(null)     // booking id or null
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
+
+  async function refresh() {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/bookings')
+      if (!res.ok) throw new Error(await readError(res))
+      const data = await res.json()
+      setBookings(data.map(toUI))
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { refresh() }, [])
 
   // ── derived ──
   const counts = useMemo(() => {
@@ -76,25 +122,39 @@ const canActOn = (b) => userIsApprover && canApproveRegion(b.region)
   }, [bookings, filter])
 
   // ── actions ──
-  function handleApprove(id) {
+  async function handleApprove(id) {
     const target = bookings.find(b => b.id === id)
     if (!target || !canActOn(target)) return
-    setBookings(prev => prev.map(b =>
-      b.id === id
-        ? { ...b, status: 'approved', approvedBy: currentUser.email, approvedAt: new Date().toISOString() }
-        : b
-    ))
+    setError('')
+    try {
+      const res = await fetch(
+        `/api/bookings/${id}/approve?approver_email=${encodeURIComponent(currentUser.email)}`,
+        { method: 'PATCH' }
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      const updated = toUI(await res.json())
+      setBookings(prev => prev.map(b => b.id === id ? updated : b))
+    } catch (e) {
+      setError(e.message)
+    }
     // TODO: notifyRequester(booking) — send Outlook email to submitter
   }
 
-  function handleReject(id) {
+  async function handleReject(id) {
     const target = bookings.find(b => b.id === id)
     if (!target || !canActOn(target)) return
-    setBookings(prev => prev.map(b =>
-      b.id === id
-        ? { ...b, status: 'rejected', rejectedBy: currentUser.email, rejectedAt: new Date().toISOString(), rejectionReason: rejectReason }
-        : b
-    ))
+    setError('')
+    try {
+      const res = await fetch(
+        `/api/bookings/${id}/reject?approver_email=${encodeURIComponent(currentUser.email)}`,
+        { method: 'PATCH' }
+      )
+      if (!res.ok) throw new Error(await readError(res))
+      const updated = toUI(await res.json())
+      setBookings(prev => prev.map(b => b.id === id ? updated : b))
+    } catch (e) {
+      setError(e.message)
+    }
     setRejectingId(null)
     setRejectReason('')
     // TODO: notifyRequester(booking) — send Outlook email with reason
@@ -124,7 +184,11 @@ const canActOn = (b) => userIsApprover && canApproveRegion(b.region)
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {error && <div className="meta-text" style={{ color: '#c2410c', margin: '0 2px 10px' }}>{error}</div>}
+
+      {loading ? (
+        <div className="approvals-empty">Loading…</div>
+      ) : filtered.length === 0 ? (
         <div className="approvals-empty">
           No {filter === 'all' ? '' : filter} bookings to show.
         </div>
