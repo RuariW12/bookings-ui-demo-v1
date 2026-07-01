@@ -1,10 +1,19 @@
 import { useState, useEffect } from 'react'
 import { listUsers, addUser, updateUser, setActive, REGIONS } from '../lib/userStore'
+import { useAuth } from '../lib/auth'
 
 const INK = '#242424', MUTED = '#605e5c', BORDER = '#d7d5d2'
 const HAIRLINE = '#e6e4e2', ACCENT = '#e35205', SURFACE = '#f3f2f1'
 
+const ROLES = ['requester', 'approver', 'admin']
+
 export default function Admin() {
+  const { user } = useAuth()
+  const actorEmail = user?.email || ''
+  const actorRegions = user?.approverRegions ?? []
+  // Regions this admin may assign. A '*' wildcard means all regions.
+  const allowedRegions = actorRegions.includes('*') ? REGIONS : actorRegions
+
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -14,7 +23,8 @@ export default function Admin() {
   const [role, setRole] = useState('requester')
   const [newRegions, setNewRegions] = useState([])
 
-  const [editing, setEditing] = useState(null)
+  const [editing, setEditing] = useState(null)     // user email being edited
+  const [editRole, setEditRole] = useState('')
   const [editRegions, setEditRegions] = useState([])
 
   async function refresh() {
@@ -31,20 +41,25 @@ export default function Admin() {
   async function handleAdd() {
     setError('')
     try {
-      await addUser({ email, role, regions: newRegions, displayName: name })
+      await addUser({ email, role, regions: newRegions, displayName: name }, actorEmail)
       setEmail(''); setName(''); setRole('requester'); setNewRegions([])
       refresh()
     } catch (e) { setError(e.message) }
   }
   async function handleToggleActive(u) {
     setError('')
-    try { await setActive(u.email, !u.active); refresh() }
+    try { await setActive(u.email, !u.active, actorEmail); refresh() }
     catch (e) { setError(e.message) }
   }
-  function startEdit(u) { setEditing(u.email); setEditRegions(u.regions) }
+  function startEdit(u) {
+    setEditing(u.email)
+    setEditRole(u.role)
+    setEditRegions(u.regions)
+  }
   async function saveEdit(u) {
     setError('')
-    try { await updateUser(u.email, { regions: editRegions }); setEditing(null); refresh() }
+    const patch = { role: editRole, regions: editRole === 'requester' ? [] : editRegions }
+    try { await updateUser(u.email, patch, actorEmail); setEditing(null); refresh() }
     catch (e) { setError(e.message) }
   }
 
@@ -55,12 +70,13 @@ export default function Admin() {
     background: on ? ACCENT : '#fff', color: on ? '#fff' : MUTED,
   })
   const btn = { padding: '5px 10px', fontSize: '0.78rem', borderRadius: 5, cursor: 'pointer', border: `1px solid ${BORDER}`, background: '#fff', color: INK }
+  const sel = { padding: '4px 6px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.78rem', color: INK }
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', paddingTop: 24 }}>
       <h2 style={{ fontSize: '1.1rem', color: INK, margin: '0 0 4px' }}>User administration</h2>
       <p style={{ fontSize: '0.85rem', color: MUTED, margin: '0 0 18px' }}>
-        Manage approvers and requesters. Admins are seeded and shown read-only.
+        Manage requesters, approvers, and admins within your regions. Seeded accounts are read-only.
       </p>
 
       {/* Add user */}
@@ -75,12 +91,13 @@ export default function Admin() {
             style={{ padding: '7px 9px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.85rem' }}>
             <option value="requester">Requester</option>
             <option value="approver">Approver</option>
+            <option value="admin">Admin</option>
           </select>
         </div>
-        {role === 'approver' && (
+        {role !== 'requester' && (
           <div style={{ marginTop: 10 }}>
             <span style={{ fontSize: '0.75rem', color: MUTED, marginRight: 6 }}>Regions:</span>
-            {REGIONS.map((r) => (
+            {allowedRegions.map((r) => (
               <span key={r} style={chip(newRegions.includes(r))} onClick={() => toggle(newRegions, setNewRegions, r)}>{r}</span>
             ))}
           </div>
@@ -114,13 +131,19 @@ export default function Admin() {
                     <div style={{ color: MUTED, fontSize: '0.75rem' }}>{u.email}</div>
                   </td>
                   <td style={cell}>
-                    {u.role}{u.seeded && <span style={{ color: MUTED }}> 🔒</span>}
+                    {isEditing && !u.seeded ? (
+                      <select value={editRole} onChange={(e) => setEditRole(e.target.value)} style={sel}>
+                        {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    ) : (
+                      <>{u.role}{u.seeded && <span style={{ color: MUTED }}> 🔒</span>}</>
+                    )}
                   </td>
                   <td style={cell}>
-                    {u.role === 'requester' ? <span style={{ color: MUTED }}>—</span>
-                      : isEditing ? REGIONS.map((r) => (
-                          <span key={r} style={chip(editRegions.includes(r))} onClick={() => toggle(editRegions, setEditRegions, r)}>{r}</span>
-                        ))
+                    {isEditing && editRole !== 'requester' ? allowedRegions.map((r) => (
+                        <span key={r} style={chip(editRegions.includes(r))} onClick={() => toggle(editRegions, setEditRegions, r)}>{r}</span>
+                      ))
+                      : u.role === 'requester' ? <span style={{ color: MUTED }}>—</span>
                       : (u.regions.join(', ') || <span style={{ color: MUTED }}>none</span>)}
                   </td>
                   <td style={cell}>{u.active ? 'Active' : 'Inactive'}</td>
@@ -132,9 +155,7 @@ export default function Admin() {
                       </>
                     ) : (
                       <>
-                        {u.role === 'approver' && (
-                          <button onClick={() => startEdit(u)} style={{ ...btn, marginRight: 5 }}>Edit regions</button>
-                        )}
+                        <button onClick={() => startEdit(u)} style={{ ...btn, marginRight: 5 }}>Edit</button>
                         <button onClick={() => handleToggleActive(u)} style={btn}>
                           {u.active ? 'Deactivate' : 'Reactivate'}
                         </button>
