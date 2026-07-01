@@ -73,11 +73,13 @@ export default function Approvals() {
   const { user, canApproveRegion } = useAuth()
   const currentUser = user
   const userIsApprover = !!user?.isApprover
+  const userIsAdmin = !!user?.isAdmin
+  const canReview = userIsApprover || userIsAdmin
   const approverRegions = user?.approverRegions ?? []
 
-  // An approver can act on a booking only if its region is in their scope.
+  // Admins can act on any region; approvers only within their scope.
   // Wildcard '*' (all regions) is handled inside canApproveRegion.
-  const canActOn = (b) => userIsApprover && canApproveRegion(b.region)
+  const canActOn = (b) => userIsAdmin || (userIsApprover && canApproveRegion(b.region))
 
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -178,9 +180,9 @@ export default function Approvals() {
         ))}
       </div>
 
-      {userIsApprover && (
+      {canReview && (
         <div className="meta-text" style={{ margin: '4px 2px 10px' }}>
-          Approving for: <strong>{approverRegions.includes('*') ? 'all regions' : (approverRegions.join(', ') || '—')}</strong>
+          Approving for: <strong>{userIsAdmin || approverRegions.includes('*') ? 'all regions' : (approverRegions.join(', ') || '—')}</strong>
         </div>
       )}
 
@@ -202,7 +204,7 @@ export default function Approvals() {
               <th>Date</th>
               <th>Status</th>
               <th>Submitted</th>
-              {userIsApprover && <th>Actions</th>}
+              {canReview && <th>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -236,7 +238,7 @@ export default function Approvals() {
                     <div className="meta-text">{b.submittedBy ? b.submittedBy.split('@')[0].replace('.', ' ') : '—'}</div>
                     {b.submittedAt && <div className="meta-text">{formatTimestamp(b.submittedAt)}</div>}
                   </td>
-                  {userIsApprover && (
+                  {canReview && (
                     <td className="col-actions" onClick={e => e.stopPropagation()}>
                       {b.status === 'pending' ? (
                         canActOn(b) ? (
@@ -276,7 +278,7 @@ export default function Approvals() {
                 {/* Expandable detail row */}
                 {expanded === b.id && (
                   <tr key={b.id + '-detail'} className="detail-row">
-                    <td colSpan={userIsApprover ? 7 : 6}>
+                    <td colSpan={canReview ? 7 : 6}>
                       <dl className="detail-grid">
                         <div><dt>Environment</dt><dd>{b.environment || '—'}</dd></div>
                         <div><dt>Environment ID</dt><dd>{b.environmentId || '—'}</dd></div>
