@@ -77,9 +77,9 @@ export default function Approvals() {
   const canReview = userIsApprover || userIsAdmin
   const approverRegions = user?.approverRegions ?? []
 
-  // Admins can act on any region; approvers only within their scope.
+  // Both admins and approvers act only within their scoped regions.
   // Wildcard '*' (all regions) is handled inside canApproveRegion.
-  const canActOn = (b) => userIsAdmin || (userIsApprover && canApproveRegion(b.region))
+  const canActOn = (b) => canReview && canApproveRegion(b.region)
 
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -182,7 +182,7 @@ export default function Approvals() {
 
       {canReview && (
         <div className="meta-text" style={{ margin: '4px 2px 10px' }}>
-          Approving for: <strong>{userIsAdmin || approverRegions.includes('*') ? 'all regions' : (approverRegions.join(', ') || '—')}</strong>
+          Approving for: <strong>{approverRegions.includes('*') ? 'all regions' : (approverRegions.join(', ') || '—')}</strong>
         </div>
       )}
 
