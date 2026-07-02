@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, HTTPException
 from database import get_pool
 from models import BookingCreate, BookingUpdate, BookingOut
@@ -10,6 +11,14 @@ EDITABLE = (
     "region", "scheduled_date", "scheduled_time", "company_name", "company_id",
     "environment_id", "environment_name", "host_region", "notes",
 )
+
+
+def row_to_booking(row) -> dict:
+    """asyncpg returns JSONB as a string; parse details back into a dict."""
+    d = dict(row)
+    raw = d.get("details")
+    d["details"] = json.loads(raw) if isinstance(raw, str) else raw
+    return d
 
 
 @router.get("", response_model=list[BookingOut])
@@ -25,27 +34,29 @@ async def list_bookings(region: str | None = None, status: str | None = None):
         query += f" AND status = ${len(args)}"
     query += " ORDER BY created_at DESC"
     rows = await pool.fetch(query, *args)
-    return [dict(r) for r in rows]
+    return [row_to_booking(r) for r in rows]
 
 
 @router.post("", response_model=BookingOut, status_code=201)
 async def create_booking(booking: BookingCreate):
     pool = await get_pool()
+    details_json = json.dumps(booking.details.model_dump()) if booking.details else None
     row = await pool.fetchrow(
         """INSERT INTO bookings
-               (operation_type, region, scheduled_date, scheduled_time,
+               (process_type, operation_type, region, scheduled_date, scheduled_time,
                 company_name, company_id, environment_id, environment_name,
-                host_region, notes, requester_email, requester_name)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                host_region, notes, requester_email, requester_name, details)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
            RETURNING *""",
-        booking.operation_type, booking.region,
+        booking.process_type, booking.operation_type, booking.region,
         booking.scheduled_date, booking.scheduled_time,
         booking.company_name, booking.company_id,
         booking.environment_id, booking.environment_name,
         booking.host_region, booking.notes,
         booking.requester_email, booking.requester_name,
+        details_json,
     )
-    return dict(row)
+    return row_to_booking(row)
 
 
 @router.patch("/{booking_id}", response_model=BookingOut)
@@ -63,6 +74,11 @@ async def update_booking(booking_id: int, update: BookingUpdate):
             args.append(val)
             sets.append(f"{field} = ${len(args)}")
 
+    # details is JSONB — serialize before binding.
+    if update.details is not None:
+        args.append(json.dumps(update.details.model_dump()))
+        sets.append(f"details = ${len(args)}")
+
     # Status here is scoped to cancel/restore only; approval owns its own route.
     if update.status is not None:
         if update.status not in ("pending", "cancelled"):
@@ -78,7 +94,7 @@ async def update_booking(booking_id: int, update: BookingUpdate):
         f"UPDATE bookings SET {', '.join(sets)}, updated_at = now() WHERE id = ${len(args)} RETURNING *",
         *args,
     )
-    return dict(row)
+    return row_to_booking(row)
 
 
 @router.patch("/{booking_id}/approve", response_model=BookingOut)
@@ -95,7 +111,10 @@ async def approve_booking(booking_id: int, approver_email: str):
     )
     if not approver or approver["role"] not in ("approver", "admin"):
         raise HTTPException(403, "Not authorized to approve")
-    if approver["role"] == "approver" and existing["region"] not in list(approver["regions"] or []):
+    # Region check only applies to region-scoped bookings (migration). OCU rows
+    # have region = NULL and are not region-gated.
+    if (approver["role"] == "approver" and existing["region"] is not None
+            and existing["region"] not in list(approver["regions"] or [])):
         raise HTTPException(403, "Not authorized to approve bookings in this region")
 
     row = await pool.fetchrow(
@@ -104,7 +123,7 @@ async def approve_booking(booking_id: int, approver_email: str):
            WHERE id = $1 RETURNING *""",
         booking_id, approver_email,
     )
-    return dict(row)
+    return row_to_booking(row)
 
 
 @router.patch("/{booking_id}/reject", response_model=BookingOut)
@@ -121,7 +140,8 @@ async def reject_booking(booking_id: int, approver_email: str):
     )
     if not approver or approver["role"] not in ("approver", "admin"):
         raise HTTPException(403, "Not authorized to reject")
-    if approver["role"] == "approver" and existing["region"] not in list(approver["regions"] or []):
+    if (approver["role"] == "approver" and existing["region"] is not None
+            and existing["region"] not in list(approver["regions"] or [])):
         raise HTTPException(403, "Not authorized to reject bookings in this region")
 
     row = await pool.fetchrow(
@@ -130,4 +150,4 @@ async def reject_booking(booking_id: int, approver_email: str):
            WHERE id = $1 RETURNING *""",
         booking_id, approver_email,
     )
-    return dict(row)
+    return row_to_booking(row)
