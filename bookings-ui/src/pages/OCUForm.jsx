@@ -1,25 +1,13 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
+import { REGIONS } from '../lib/bookings'
+import { allowedStartTimes } from '../lib/operatingHours'
 
 const DOW = ["S", "M", "T", "W", "T", "F", "S"]
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ]
-
-// 30-minute slots across the full day, labelled like "3:00 AM". Narrow this
-// range later if OCU should have restricted booking hours.
-const OCU_SLOTS = (() => {
-  const out = []
-  for (let h = 0; h < 24; h++) {
-    for (const m of [0, 30]) {
-      const ampm = h >= 12 ? "PM" : "AM"
-      const dispH = ((h + 11) % 12) + 1
-      out.push(`${dispH}:${String(m).padStart(2, "0")} ${ampm}`)
-    }
-  }
-  return out
-})()
 
 function startOfToday() { const t = new Date(); t.setHours(0, 0, 0, 0); return t }
 function fmtISO(d) {
@@ -40,6 +28,7 @@ export default function OCUForm() {
   const [environmentId, setEnvironmentId] = useState('')
   const [csmEmail, setCsmEmail] = useState(user?.email || '')
   const [detailsText, setDetailsText] = useState('')
+  const [region, setRegion] = useState('')
   const [time, setTime] = useState('')
   const [error, setError] = useState('')
 
@@ -48,7 +37,7 @@ export default function OCUForm() {
   const [viewDate, setViewDate] = useState(() => {
     const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), 1)
   })
-  // existing OCU bookings as {date, time} pairs, for per-slot blocking
+  // existing OCU bookings as {date, time, region} for per-slot blocking
   const [ocuBookings, setOcuBookings] = useState([])
 
   async function loadBookings() {
@@ -59,7 +48,7 @@ export default function OCUForm() {
       setOcuBookings(
         data
           .filter((b) => b.process_type === 'ocu' && b.status !== 'cancelled' && b.scheduled_date)
-          .map((b) => ({ date: b.scheduled_date, time: b.scheduled_time }))
+          .map((b) => ({ date: b.scheduled_date, time: b.scheduled_time, region: b.region }))
       )
     } catch { /* leave as-is */ }
   }
@@ -70,27 +59,38 @@ export default function OCUForm() {
   const firstWeekday = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay()
   const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate()
 
-  // Slots already taken on the selected date.
-  const takenSet = date
-    ? new Set(ocuBookings.filter((b) => b.date === fmtISO(date)).map((b) => b.time))
-    : new Set()
-  const freeCount = OCU_SLOTS.length - takenSet.size
+  // Slots for the selected region's operating window (start times, 30-min step).
+  const regionSlots = region ? allowedStartTimes(region, 0, false).map((s) => s.label) : []
 
-  // A day is selectable if today-or-later and not every slot is taken.
+  // Slots already taken on the selected date within this region.
+  const takenSet = date && region
+    ? new Set(
+        ocuBookings
+          .filter((b) => b.date === fmtISO(date) && b.region === region)
+          .map((b) => b.time)
+      )
+    : new Set()
+  const freeCount = regionSlots.length - regionSlots.filter((s) => takenSet.has(s)).length
+
+  // A day is selectable if today-or-later and not every region slot is taken.
   function isSelectable(day) {
     if (day < startOfToday()) return false
+    if (!region) return true
     const iso = fmtISO(day)
-    const takenOnDay = ocuBookings.filter((b) => b.date === iso).length
-    return takenOnDay < OCU_SLOTS.length
+    const takenOnDay = ocuBookings.filter((b) => b.date === iso && b.region === region).length
+    return regionSlots.length === 0 || takenOnDay < regionSlots.length
   }
 
-  const canBook = cid && environmentId && date && time
+  const onRegionChange = (r) => { setRegion(r); setTime('') }
+
+  const canBook = cid && environmentId && region && date && time
 
   async function handleBook() {
     setError('')
     const isoDate = fmtISO(date)
     const body = {
       process_type: 'ocu',
+      region,
       scheduled_date: isoDate,
       scheduled_time: time,
       company_id: cid || null,
@@ -125,9 +125,9 @@ export default function OCUForm() {
         throw new Error(detail)
       }
       alert('OCU booking saved!')
-      setOcuBookings((prev) => [...prev, { date: isoDate, time }])  // block that slot immediately
+      setOcuBookings((prev) => [...prev, { date: isoDate, time, region }])
       setCid(''); setEnvironmentType(''); setEnvironmentId('')
-      setDetailsText(''); setDate(null); setTime('')
+      setDetailsText(''); setDate(null); setTime(''); setRegion('')
     } catch (e) {
       setError(e.message)
     }
@@ -135,6 +135,19 @@ export default function OCUForm() {
 
   return (
     <>
+      <div className="field">
+        <label>Region</label>
+        <select value={region} onChange={(e) => onRegionChange(e.target.value)}>
+          <option value="">-- select a region --</option>
+          {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        {region && (
+          <div className="tz" style={{ marginTop: 4 }}>
+            Available start times for {region}
+          </div>
+        )}
+      </div>
+
       <div className="field">
         <label>CID</label>
         <input type="text" value={cid} onChange={(e) => setCid(e.target.value)}
@@ -197,21 +210,23 @@ export default function OCUForm() {
           </div>
 
           <div className="cal-times">
-            {!date ? (
+            {!region ? (
+              <div className="cal-hint">Select a region first.</div>
+            ) : !date ? (
               <div className="cal-hint">Select a date to see start times.</div>
             ) : (
               <>
                 <div className="cal-hint" style={{ marginBottom: 8 }}>
-                  <strong>{freeCount}</strong> of {OCU_SLOTS.length} slots free on {fmtShort(date)}
+                  <strong>{freeCount}</strong> of {regionSlots.length} slots free on {fmtShort(date)}
                 </div>
-                {OCU_SLOTS.map((t) => {
+                {regionSlots.map((t) => {
                   const taken = takenSet.has(t)
                   return (
                     <button
                       key={t}
                       type="button"
                       disabled={taken}
-                      title={taken ? "Already booked for this day" : undefined}
+                      title={taken ? "Already booked for this region / day" : undefined}
                       className={"slot" + (time === t ? " selected" : "") + (taken ? " taken" : "")}
                       onClick={() => setTime(t)}
                     >
@@ -219,6 +234,9 @@ export default function OCUForm() {
                     </button>
                   )
                 })}
+                {regionSlots.length === 0 && (
+                  <div className="cal-hint">No operating hours defined for {region}.</div>
+                )}
               </>
             )}
           </div>
