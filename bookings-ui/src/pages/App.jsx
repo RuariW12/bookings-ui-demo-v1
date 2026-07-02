@@ -4,6 +4,7 @@ import { REGIONS, SEED_BOOKINGS } from '../lib/bookings'
 import { getCompany, activeEnvironments, listCompanies } from '../lib/servicenow'
 import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
 import { notifyApproversForBooking } from '../lib/notifications'
+import OCUForm from './OCUForm'
 
 const OPERATION_TYPES = {
   build: {
@@ -185,6 +186,9 @@ function slotsFor(region, type, durationHours) {
 }
 
 function App() {
+  // book mode — migration (parallel build) or OCU
+  const [mode, setMode] = useState("migration")
+
   // operation
   const [operationType, setOperationType] = useState("")  // "" | build | refresh | cutover
   const [tier, setTier] = useState("prod_large")           // refresh only: lower | prod_large
@@ -406,8 +410,26 @@ function App() {
   const comboList = { position: "absolute", left: 0, right: 0, top: "100%", zIndex: 20, marginTop: 2, maxHeight: 220, overflowY: "auto", background: "#fff", border: "1px solid #cdd6e4", borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }
   const comboItem = { display: "block", width: "100%", textAlign: "left", padding: "7px 10px", border: "none", borderBottom: "1px solid #eef1f6", background: "#fff", cursor: "pointer", fontSize: "0.9rem" }
 
+  const toggleBtn = (on) => ({
+    flex: 1, padding: "8px 12px", fontSize: "0.85rem", cursor: "pointer",
+    border: "1px solid #cdd6e4", background: on ? "#3a5bbf" : "#fff",
+    color: on ? "#fff" : "#3a5bbf", fontWeight: on ? 600 : 400,
+  })
+
   return (
     <>
+      {/* Book-mode toggle: parallel build (migration) vs OCU */}
+      <div style={{ display: "flex", gap: 0, marginBottom: 18 }}>
+        <button type="button" style={{ ...toggleBtn(mode === "migration"), borderRadius: "6px 0 0 6px" }}
+          onClick={() => setMode("migration")}>Parallel Build</button>
+        <button type="button" style={{ ...toggleBtn(mode === "ocu"), borderRadius: "0 6px 6px 0", borderLeft: "none" }}
+          onClick={() => setMode("ocu")}>OCU</button>
+      </div>
+
+      {mode === "ocu" ? (
+        <OCUForm />
+      ) : (
+        <>
         <div className="field">
           <label>Operation type</label>
           <select value={operationType} onChange={(e) => onTypeChange(e.target.value)}>
@@ -667,6 +689,8 @@ function App() {
         <div className="book-row">
           <button type="button" className="book-btn" onClick={handleBook} disabled={!canBook}>Book</button>
         </div>
+        </>
+      )}
     </>
   )
 }
