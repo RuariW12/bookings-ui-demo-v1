@@ -1,20 +1,17 @@
 from pydantic import BaseModel
 from datetime import datetime
 
-
 class UserCreate(BaseModel):
     email: str
     display_name: str
     role: str  # requester | approver | admin
     regions: list[str] = []
 
-
 class UserUpdate(BaseModel):
     display_name: str | None = None
     role: str | None = None
     regions: list[str] | None = None
     active: bool | None = None
-
 
 class UserOut(BaseModel):
     id: int
@@ -27,10 +24,23 @@ class UserOut(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+class FieldSource(BaseModel):
+    cid: str = "manual"
+    environment_type: str = "manual"
+    environment_id: str = "manual"
+
+class OCUDetails(BaseModel):
+    cid: str | None = None
+    environment_type: str | None = None
+    environment_id: str | None = None
+    csm_email: str | None = None
+    details_text: str | None = None
+    field_source: FieldSource = FieldSource()
 
 class BookingCreate(BaseModel):
-    operation_type: str  # environment_build | md_refresh | cutover
-    region: str  # CLD-HQ | CLD-CTC | CLD-EMEA
+    process_type: str = "migration"  # migration | ocu
+    operation_type: str | None = None  # environment_build | md_refresh | cutover (migration only)
+    region: str | None = None  # CLD-HQ | CLD-CTC | CLD-EMEA (nullable for ocu)
     scheduled_date: str
     scheduled_time: str
     company_name: str | None = None
@@ -41,7 +51,7 @@ class BookingCreate(BaseModel):
     notes: str | None = None
     requester_email: str | None = None
     requester_name: str | None = None
-
+    details: OCUDetails | None = None  # ocu-specific fields
 
 class BookingUpdate(BaseModel):
     # General edit for the schedule view. Approval is NOT handled here — it stays
@@ -56,12 +66,13 @@ class BookingUpdate(BaseModel):
     host_region: str | None = None
     notes: str | None = None
     status: str | None = None  # pending | cancelled
-
+    details: OCUDetails | None = None  # ocu edits
 
 class BookingOut(BaseModel):
     id: int
-    operation_type: str
-    region: str
+    process_type: str
+    operation_type: str | None
+    region: str | None
     scheduled_date: str
     scheduled_time: str
     company_name: str | None
@@ -76,13 +87,12 @@ class BookingOut(BaseModel):
     approved_by: str | None
     approved_at: datetime | None
     servicenow_case_id: str | None
+    details: OCUDetails | None
     created_at: datetime
     updated_at: datetime
 
-
 class CompanySearch(BaseModel):
     query: str
-
 
 class CaseCreate(BaseModel):
     short_description: str
