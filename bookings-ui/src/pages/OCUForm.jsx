@@ -7,6 +7,20 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ]
 
+// 30-minute slots across the full day, labelled like "3:00 AM". Narrow this
+// range later if OCU should have restricted booking hours.
+const OCU_SLOTS = (() => {
+  const out = []
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 30]) {
+      const ampm = h >= 12 ? "PM" : "AM"
+      const dispH = ((h + 11) % 12) + 1
+      out.push(`${dispH}:${String(m).padStart(2, "0")} ${ampm}`)
+    }
+  }
+  return out
+})()
+
 function startOfToday() { const t = new Date(); t.setHours(0, 0, 0, 0); return t }
 function fmtISO(d) {
   const y = d.getFullYear()
@@ -18,8 +32,6 @@ function fmtShort(d) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
 }
 
-// OCU booking form. Manual entry for now; the CID / environment inputs are the
-// seam where ServiceNow autofill slots in later (same pattern as migration).
 export default function OCUForm() {
   const { user } = useAuth()
 
@@ -32,36 +44,44 @@ export default function OCUForm() {
   const [error, setError] = useState('')
 
   // calendar
-  const [date, setDate] = useState(null)  // selected day (Date object)
+  const [date, setDate] = useState(null)
   const [viewDate, setViewDate] = useState(() => {
     const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), 1)
   })
-  const [takenDates, setTakenDates] = useState(new Set())  // ISO strings with an OCU booking
+  // existing OCU bookings as {date, time} pairs, for per-slot blocking
+  const [ocuBookings, setOcuBookings] = useState([])
 
-  // Load existing OCU bookings so their dates can be blocked.
-  async function loadTaken() {
+  async function loadBookings() {
     try {
       const res = await fetch('/api/bookings')
       if (!res.ok) return
       const data = await res.json()
-      const taken = data
-        .filter((b) => b.process_type === 'ocu' && b.status !== 'cancelled' && b.scheduled_date)
-        .map((b) => b.scheduled_date)
-      setTakenDates(new Set(taken))
-    } catch { /* leave takenDates as-is */ }
+      setOcuBookings(
+        data
+          .filter((b) => b.process_type === 'ocu' && b.status !== 'cancelled' && b.scheduled_date)
+          .map((b) => ({ date: b.scheduled_date, time: b.scheduled_time }))
+      )
+    } catch { /* leave as-is */ }
   }
-  useEffect(() => { loadTaken() }, [])
+  useEffect(() => { loadBookings() }, [])
 
   const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))
   const nextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))
   const firstWeekday = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay()
   const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate()
 
-  // A day is selectable if it's today or later and has no OCU booking.
+  // Slots already taken on the selected date.
+  const takenSet = date
+    ? new Set(ocuBookings.filter((b) => b.date === fmtISO(date)).map((b) => b.time))
+    : new Set()
+  const freeCount = OCU_SLOTS.length - takenSet.size
+
+  // A day is selectable if today-or-later and not every slot is taken.
   function isSelectable(day) {
     if (day < startOfToday()) return false
-    if (takenDates.has(fmtISO(day))) return false
-    return true
+    const iso = fmtISO(day)
+    const takenOnDay = ocuBookings.filter((b) => b.date === iso).length
+    return takenOnDay < OCU_SLOTS.length
   }
 
   const canBook = cid && environmentId && date && time
@@ -105,7 +125,7 @@ export default function OCUForm() {
         throw new Error(detail)
       }
       alert('OCU booking saved!')
-      setTakenDates((prev) => new Set(prev).add(isoDate))  // block the day immediately
+      setOcuBookings((prev) => [...prev, { date: isoDate, time }])  // block that slot immediately
       setCid(''); setEnvironmentType(''); setEnvironmentId('')
       setDetailsText(''); setDate(null); setTime('')
     } catch (e) {
@@ -159,8 +179,6 @@ export default function OCUForm() {
               {Array.from({ length: daysInMonth }).map((_, i) => {
                 const dayNum = i + 1
                 const thisDay = new Date(viewDate.getFullYear(), viewDate.getMonth(), dayNum)
-                const iso = fmtISO(thisDay)
-                const taken = takenDates.has(iso)
                 const selectable = isSelectable(thisDay)
                 const selected = date && date.toDateString() === thisDay.toDateString()
                 return (
@@ -168,9 +186,8 @@ export default function OCUForm() {
                     key={dayNum}
                     type="button"
                     disabled={!selectable}
-                    title={taken ? "Already booked" : undefined}
                     className={"cal-day" + (selected ? " selected" : "")}
-                    onClick={() => setDate(thisDay)}
+                    onClick={() => { setDate(thisDay); setTime("") }}
                   >
                     {dayNum}
                   </button>
@@ -181,13 +198,27 @@ export default function OCUForm() {
 
           <div className="cal-times">
             {!date ? (
-              <div className="cal-hint">Select a date to set a time.</div>
+              <div className="cal-hint">Select a date to see start times.</div>
             ) : (
               <>
                 <div className="cal-hint" style={{ marginBottom: 8 }}>
-                  <strong>{fmtShort(date)}</strong>
+                  <strong>{freeCount}</strong> of {OCU_SLOTS.length} slots free on {fmtShort(date)}
                 </div>
-                <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                {OCU_SLOTS.map((t) => {
+                  const taken = takenSet.has(t)
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      disabled={taken}
+                      title={taken ? "Already booked for this day" : undefined}
+                      className={"slot" + (time === t ? " selected" : "") + (taken ? " taken" : "")}
+                      onClick={() => setTime(t)}
+                    >
+                      {t}{taken ? " · booked" : ""}
+                    </button>
+                  )
+                })}
               </>
             )}
           </div>
