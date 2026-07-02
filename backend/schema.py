@@ -10,10 +10,10 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS bookings (
     id SERIAL PRIMARY KEY,
-    operation_type TEXT NOT NULL,
+    operation_type TEXT,
+    process_type TEXT NOT NULL DEFAULT 'migration',
     region TEXT NOT NULL,
     scheduled_date TEXT NOT NULL,
     scheduled_time TEXT NOT NULL,
@@ -29,12 +29,19 @@ CREATE TABLE IF NOT EXISTS bookings (
     approved_by TEXT,
     approved_at TIMESTAMPTZ,
     servicenow_case_id TEXT,
+    details JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
 
+MIGRATIONS = """
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS process_type TEXT NOT NULL DEFAULT 'migration';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS details JSONB;
+ALTER TABLE bookings ALTER COLUMN operation_type DROP NOT NULL;
+"""
 
 async def init_schema(pool):
     async with pool.acquire() as conn:
         await conn.execute(SCHEMA)
+        await conn.execute(MIGRATIONS)
