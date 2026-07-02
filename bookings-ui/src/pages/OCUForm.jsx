@@ -1,10 +1,25 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
 
-// OCU booking form. Fields are manual entry for now; the CID / environment
-// inputs are the seam where ServiceNow autofill slots in later (same pattern
-// as the migration form), at which point environment ID becomes a SNOW-backed
-// dropdown instead of a text field.
+const DOW = ["S", "M", "T", "W", "T", "F", "S"]
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+]
+
+function startOfToday() { const t = new Date(); t.setHours(0, 0, 0, 0); return t }
+function fmtISO(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}-${m}-${day}`
+}
+function fmtShort(d) {
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
+}
+
+// OCU booking form. Manual entry for now; the CID / environment inputs are the
+// seam where ServiceNow autofill slots in later (same pattern as migration).
 export default function OCUForm() {
   const { user } = useAuth()
 
@@ -13,33 +28,63 @@ export default function OCUForm() {
   const [environmentId, setEnvironmentId] = useState('')
   const [csmEmail, setCsmEmail] = useState(user?.email || '')
   const [detailsText, setDetailsText] = useState('')
-  const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [error, setError] = useState('')
+
+  // calendar
+  const [date, setDate] = useState(null)  // selected day (Date object)
+  const [viewDate, setViewDate] = useState(() => {
+    const t = new Date(); return new Date(t.getFullYear(), t.getMonth(), 1)
+  })
+  const [takenDates, setTakenDates] = useState(new Set())  // ISO strings with an OCU booking
+
+  // Load existing OCU bookings so their dates can be blocked.
+  async function loadTaken() {
+    try {
+      const res = await fetch('/api/bookings')
+      if (!res.ok) return
+      const data = await res.json()
+      const taken = data
+        .filter((b) => b.process_type === 'ocu' && b.status !== 'cancelled' && b.scheduled_date)
+        .map((b) => b.scheduled_date)
+      setTakenDates(new Set(taken))
+    } catch { /* leave takenDates as-is */ }
+  }
+  useEffect(() => { loadTaken() }, [])
+
+  const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))
+  const nextMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))
+  const firstWeekday = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1).getDay()
+  const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate()
+
+  // A day is selectable if it's today or later and has no OCU booking.
+  function isSelectable(day) {
+    if (day < startOfToday()) return false
+    if (takenDates.has(fmtISO(day))) return false
+    return true
+  }
 
   const canBook = cid && environmentId && date && time
 
   async function handleBook() {
     setError('')
+    const isoDate = fmtISO(date)
     const body = {
       process_type: 'ocu',
-      scheduled_date: date,
+      scheduled_date: isoDate,
       scheduled_time: time,
-      // Top-level fields so existing Schedule/Approvals views can render OCU rows.
       company_id: cid || null,
       environment_id: environmentId || null,
       environment_name: environmentType || null,
       requester_email: csmEmail || null,
       requester_name: user?.displayName || null,
       notes: detailsText || null,
-      // OCU-specific payload in the JSONB details column.
       details: {
         cid: cid || null,
         environment_type: environmentType || null,
         environment_id: environmentId || null,
         csm_email: csmEmail || null,
         details_text: detailsText || null,
-        // All manual for now; SNOW autofill will set these to 'servicenow'.
         field_source: {
           cid: 'manual',
           environment_type: 'manual',
@@ -60,8 +105,9 @@ export default function OCUForm() {
         throw new Error(detail)
       }
       alert('OCU booking saved!')
+      setTakenDates((prev) => new Set(prev).add(isoDate))  // block the day immediately
       setCid(''); setEnvironmentType(''); setEnvironmentId('')
-      setDetailsText(''); setDate(''); setTime('')
+      setDetailsText(''); setDate(null); setTime('')
     } catch (e) {
       setError(e.message)
     }
@@ -98,10 +144,55 @@ export default function OCUForm() {
 
       <div className="field">
         <label>Select a date and time</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+        <div className="cal-row">
+          <div className="cal">
+            <div className="cal-head">
+              <button type="button" onClick={prevMonth}>‹</button>
+              <span>{MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}</span>
+              <button type="button" onClick={nextMonth}>›</button>
+            </div>
+
+            <div className="cal-grid">
+              {DOW.map((d, i) => <div key={i} className="cal-dow">{d}</div>)}
+              {Array.from({ length: firstWeekday }).map((_, i) => <div key={"blank" + i} />)}
+
+              {Array.from({ length: daysInMonth }).map((_, i) => {
+                const dayNum = i + 1
+                const thisDay = new Date(viewDate.getFullYear(), viewDate.getMonth(), dayNum)
+                const iso = fmtISO(thisDay)
+                const taken = takenDates.has(iso)
+                const selectable = isSelectable(thisDay)
+                const selected = date && date.toDateString() === thisDay.toDateString()
+                return (
+                  <button
+                    key={dayNum}
+                    type="button"
+                    disabled={!selectable}
+                    title={taken ? "Already booked" : undefined}
+                    className={"cal-day" + (selected ? " selected" : "")}
+                    onClick={() => setDate(thisDay)}
+                  >
+                    {dayNum}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="cal-times">
+            {!date ? (
+              <div className="cal-hint">Select a date to set a time.</div>
+            ) : (
+              <>
+                <div className="cal-hint" style={{ marginBottom: 8 }}>
+                  <strong>{fmtShort(date)}</strong>
+                </div>
+                <input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+              </>
+            )}
+          </div>
         </div>
+
         <div className="tz">All times are in (UTC−05:00) Eastern Time (US &amp; Canada)</div>
       </div>
 
