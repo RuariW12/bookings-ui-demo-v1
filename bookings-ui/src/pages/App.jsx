@@ -412,14 +412,14 @@ function App() {
 
   const toggleBtn = (on) => ({
     flex: 1, padding: "8px 12px", fontSize: "0.85rem", cursor: "pointer",
-    border: "1px solid #cdd6e4", background: on ? "#3a5bbf" : "#fff",
-    color: on ? "#fff" : "#3a5bbf", fontWeight: on ? 600 : 400,
+    border: "1px solid #d0d0d0", background: on ? "#e5e5e5" : "#fff",
+    color: on ? "#333" : "#888", fontWeight: on ? 600 : 400,
   })
 
   return (
     <>
       {/* Book-mode toggle: parallel build (migration) vs OCU */}
-      <div style={{ display: "flex", gap: 0, marginBottom: 18 }}>
+      <div style={{ display: "flex", gap: 0, marginTop: 20, marginBottom: 18 }}>
         <button type="button" style={{ ...toggleBtn(mode === "migration"), borderRadius: "6px 0 0 6px" }}
           onClick={() => setMode("migration")}>Parallel Build</button>
         <button type="button" style={{ ...toggleBtn(mode === "ocu"), borderRadius: "0 6px 6px 0", borderLeft: "none" }}
