@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     id SERIAL PRIMARY KEY,
     operation_type TEXT,
     process_type TEXT NOT NULL DEFAULT 'migration',
-    region TEXT NOT NULL,
+    region TEXT,
     scheduled_date TEXT NOT NULL,
     scheduled_time TEXT NOT NULL,
     company_name TEXT,
@@ -39,6 +39,7 @@ MIGRATIONS = """
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS process_type TEXT NOT NULL DEFAULT 'migration';
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS details JSONB;
 ALTER TABLE bookings ALTER COLUMN operation_type DROP NOT NULL;
+ALTER TABLE bookings ALTER COLUMN region DROP NOT NULL;
 """
 
 async def init_schema(pool):
