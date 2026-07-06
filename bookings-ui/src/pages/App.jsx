@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import './App.css'
-import { REGIONS, SEED_BOOKINGS } from '../lib/bookings'
+import { REGIONS, REGION_BUILD_CAPACITY } from '../lib/bookings'
 import { getCompany, activeEnvironments, listCompanies } from '../lib/servicenow'
 import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
 import { notifyApproversForBooking } from '../lib/notifications'
@@ -122,17 +122,25 @@ function fmtISO(d) {
   const day = String(d.getDate()).padStart(2, "0")
   return `${y}-${m}-${day}`
 }
+// Parse a "YYYY-MM-DD" string as a LOCAL date (no UTC shift).
+function parseISO(s) {
+  if (!s) return null
+  const [y, m, d] = s.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
 function fmtShort(d) {
   return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })
 }
 
-function takenSlots(region, day) {
-  const iso = fmtISO(day)
-  return new Set(
-    SEED_BOOKINGS
-      .filter((b) => b.region === region && b.status !== "cancelled" && b.start === iso && b.startTime)
-      .map((b) => b.startTime)
-  )
+// Normalize a stored operation_type (either the internal key "build" or the
+// display label "Environment Build") down to a canonical key.
+function opKey(opType) {
+  if (!opType) return null
+  const v = String(opType).toLowerCase()
+  if (v === "build" || v.includes("environment build")) return "build"
+  if (v === "refresh" || v.includes("md refresh")) return "refresh"
+  if (v === "cutover") return "cutover"
+  return null
 }
 
 // The n business days starting from `startDate` (inclusive), going forward,
@@ -208,6 +216,9 @@ function App() {
   const [time, setTime] = useState("")     // start time (refresh/cutover only)
   const [viewDate, setViewDate] = useState(new Date(2026, 5, 1))
 
+  // existing bookings — the real capacity/slot picture, loaded from the backend.
+  const [bookings, setBookings] = useState([])
+
   // details
   const [bookerName, setBookerName] = useState("")
   const [csmEmail, setCsmEmail] = useState("")
@@ -216,6 +227,53 @@ function App() {
 
   // Load the full company list once so the dropdown shows options before typing.
   useEffect(() => { listCompanies().then(setAllCompanies) }, [])
+
+  // Load existing bookings so the calendar can gray out full days.
+  const loadBookings = () =>
+    fetch("/api/bookings")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setBookings)
+      .catch(() => {})
+  useEffect(() => { loadBookings() }, [])
+
+  // Normalize backend rows (snake_case) to the shape the calendar logic needs.
+  // Cancelled / rejected bookings don't occupy capacity.
+  const existing = useMemo(
+    () =>
+      (bookings || [])
+        .map((b) => ({
+          region: b.region,
+          op: opKey(b.operation_type),
+          start: b.scheduled_date,
+          startTime: b.scheduled_time,
+          status: b.status,
+        }))
+        .filter((b) => b.status !== "cancelled" && b.status !== "rejected"),
+    [bookings]
+  )
+
+  // How many builds occupy a given region on a given calendar day. A build
+  // occupies its whole 5-business-day span, not just its start date.
+  const buildCountOnDay = (region, day) => {
+    const iso = fmtISO(day)
+    let n = 0
+    for (const b of existing) {
+      if (b.region !== region || b.op !== "build" || !b.start) continue
+      const span = businessDaysFrom(parseISO(b.start), OPERATION_TYPES.build.spanBusinessDays)
+      if (span.some((d) => fmtISO(d) === iso)) n++
+    }
+    return n
+  }
+
+  // Slots already taken (timed ops) for a region + day, from real bookings.
+  const takenSlots = (region, day) => {
+    const iso = fmtISO(day)
+    return new Set(
+      existing
+        .filter((b) => b.region === region && b.op !== "build" && b.start === iso && b.startTime)
+        .map((b) => b.startTime)
+    )
+  }
 
   const cfg = operationType ? OPERATION_TYPES[operationType] : null
   const hours = operationType ? operationHours(operationType, tier) : 0
@@ -245,10 +303,12 @@ function App() {
     if (t !== "refresh") setTier("prod_large")
   }
 
-  // Changing region can invalidate the chosen slot (different window / now taken).
+  // Changing region can invalidate the chosen slot/date (different window,
+  // now taken, or over capacity) — clear both so nothing invalid stays selected.
   const onRegionChange = (r) => {
     setRegion(r)
     setTime("")
+    setDate(null)
   }
 
   // --- Company combobox: type to filter, or pick from the list ---
@@ -320,7 +380,15 @@ function App() {
       // Build starts on the selected day and runs 5 business days forward, so
       // the start must be a weekday and at least 2 weeks out.
       if (isWeekend(day)) return false
-      return day >= addDays(startOfToday(), cfg.leadDays)
+      if (day < addDays(startOfToday(), cfg.leadDays)) return false
+      // Capacity: the new build's 5-day span must not push any day it covers
+      // past the region's build capacity.
+      if (region) {
+        const cap = REGION_BUILD_CAPACITY[region] ?? Infinity
+        const span = businessDaysFrom(day, cfg.spanBusinessDays)
+        if (span.some((d) => buildCountOnDay(region, d) >= cap)) return false
+      }
+      return true
     }
     // timed ops (refresh / cutover): respect lead time
     if (day < addDays(startOfToday(), leadDaysFor(operationType, day))) return false
@@ -391,6 +459,7 @@ function App() {
       })
       if (res.ok) {
         alert("Booking saved!")
+        loadBookings()   // refresh capacity so the calendar reflects this booking
       } else {
         alert("Server responded with status " + res.status)
       }
@@ -437,6 +506,7 @@ function App() {
           {region && (
             <div className="tz" style={{ marginTop: 4 }}>
               Capacity &amp; available slots for {region}
+              {operationType === "build" && ` · up to ${REGION_BUILD_CAPACITY[region] ?? "—"} concurrent builds`}
             </div>
           )}
         </div>
@@ -565,12 +635,23 @@ function App() {
                   const selectable = isSelectable(thisDay)
                   const selected = date && date.toDateString() === thisDay.toDateString()
                   const span = operationType === "build" && inBuildSpan(thisDay)
+                  // Explain a disabled build day: at/over capacity vs other reasons.
+                  const buildFull =
+                    operationType === "build" && region && !selectable && !isWeekend(thisDay) &&
+                    thisDay >= addDays(startOfToday(), cfg.leadDays) &&
+                    businessDaysFrom(thisDay, cfg.spanBusinessDays).some(
+                      (d) => buildCountOnDay(region, d) >= (REGION_BUILD_CAPACITY[region] ?? Infinity)
+                    )
                   return (
                     <button
                       key={dayNum}
                       type="button"
                       disabled={!selectable}
-                      title={span ? "Reserved build day" : undefined}
+                      title={
+                        buildFull ? `${region} at build capacity for this window`
+                        : span ? "Reserved build day"
+                        : undefined
+                      }
                       className={"cal-day" + (selected ? " selected" : "")}
                       style={span ? { background: "#dce7fb", borderColor: "#9db8e8" } : undefined}
                       onClick={() => { setDate(thisDay); setTime("") }}
