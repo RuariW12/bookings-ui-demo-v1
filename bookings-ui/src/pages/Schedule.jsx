@@ -117,6 +117,7 @@ export default function Schedule() {
   const [error, setError] = useState('')
   const [viewStart, setViewStart] = useState(() => sundayOf(new Date()))
   const [selectedId, setSelectedId] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const selected = bookings.find((b) => b.id === selectedId) || null
 
@@ -147,11 +148,23 @@ export default function Schedule() {
   )
   const today = strip(new Date())
 
+  // Filter by company name / title
+  const filteredBookings = useMemo(
+    () => {
+      const term = searchTerm.trim().toLowerCase()
+      if (!term) return bookings
+      return bookings.filter((b) =>
+        (b.title || '').toLowerCase().includes(term)
+      )
+    },
+    [bookings, searchTerm]
+  )
+
   // rows = known regions + an "Unassigned" row if any booking has region == null
   const rows = useMemo(() => {
-    const hasNull = bookings.some((b) => b.region == null)
+    const hasNull = filteredBookings.some((b) => b.region == null)
     return [...REGIONS, ...(hasNull ? ["__none"] : [])]
-  }, [bookings])
+  }, [filteredBookings])
 
   // Persist an edit to the backend, then re-fetch so the timeline reflects
   // exactly what was saved. `patch` uses backend (snake_case) field names.
@@ -195,6 +208,16 @@ export default function Schedule() {
     <div className="sched">
       <div className="sched-toolbar">
         <h2>Parallel build schedule</h2>
+
+        {/* Search bar */}
+        <input
+          className="sched-search"
+          type="text"
+          placeholder="Search by company name..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+
         <div className="spacer" />
         <span className="sched-range">{fmtRange(viewStart)}</span>
         <button className="sched-nav" aria-label="Previous two weeks" onClick={() => setViewStart(addDays(viewStart, -7))}>‹</button>
@@ -225,7 +248,7 @@ export default function Schedule() {
           {/* region rows */}
           {rows.map((regionKey) => {
             const region = regionKey === "__none" ? null : regionKey
-            const items = bookings.filter((b) => b.region === region)
+            const items = filteredBookings.filter((b) => b.region === region)
             const laid = assignLanes([...items].sort((a, b) => parseISO(a.start) - parseISO(b.start)))
             const laneCount = Math.max(1, ...laid.map((it) => it.lane + 1))
             const trackH = laneCount * (LANE_H + LANE_GAP) - LANE_GAP + PAD * 2
@@ -294,7 +317,11 @@ export default function Schedule() {
         </div>
       </div>
 
-      {!loading && bookings.length === 0 && <div className="sched-empty">No bookings yet.</div>}
+      {!loading && filteredBookings.length === 0 && (
+        <div className="sched-empty">
+          {searchTerm ? 'No bookings match this company name.' : 'No bookings yet.'}
+        </div>
+      )}
 
       {selected && (
         <DetailModal

@@ -328,3 +328,27 @@ textarea.alloc-box { min-height: 64px; resize: vertical; }
 @media (max-width: 560px) {
   .sched-board { grid-template-columns: 150px repeat(14, 88px); }
 }
+
+
+/* search box in toolbar */
+.sched-search {
+  min-width: 220px;
+  max-width: 280px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid #8a8886;
+  font: inherit;
+  font-size: 13px;
+  color: #242424;
+  background: #fff;
+}
+
+.sched-search::placeholder {
+  color: #a19f9d;
+}
+
+.sched-search:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
+}
