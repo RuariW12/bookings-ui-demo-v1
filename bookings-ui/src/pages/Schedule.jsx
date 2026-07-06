@@ -162,21 +162,13 @@ function SearchBox({ bookings, onSelect }) {
   const containerRef        = useRef(null)
   const inputRef            = useRef(null)
 
-  // Derive suggestions: match on title, de-dupe by company name, cap at 8
+  // Match on CID, return every matching booking with no de-duplication or cap
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    const seen = new Set()
-    const hits = []
-    for (const b of bookings) {
-      const t = (b.title || '').toLowerCase()
-      if (!t.includes(q)) continue
-      if (seen.has(b.title)) continue
-      seen.add(b.title)
-      hits.push(b)
-      if (hits.length === 8) break
-    }
-    return hits
+    return bookings.filter((b) =>
+      (b.cid || '').toLowerCase().includes(q)
+    )
   }, [query, bookings])
 
   // Close dropdown when clicking outside
@@ -191,7 +183,7 @@ function SearchBox({ bookings, onSelect }) {
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [])
 
-  // Reset cursor when suggestion list changes length
+  // Reset cursor when suggestion list length changes
   useEffect(() => {
     setCursor(-1)
   }, [suggestions.length])
@@ -237,7 +229,7 @@ function SearchBox({ bookings, onSelect }) {
         ref={inputRef}
         className="sched-search"
         type="text"
-        placeholder="Search company…"
+        placeholder="Search by CID…"
         value={query}
         autoComplete="off"
         spellCheck={false}
@@ -257,17 +249,15 @@ function SearchBox({ bookings, onSelect }) {
               role="option"
               aria-selected={i === cursor}
               className={'sb-item' + (i === cursor ? ' sb-item--active' : '')}
-              // pointerdown fires before the input's blur event,
-              // so we can safely commit here without the dropdown
-              // closing prematurely from a focus-out handler
               onPointerDown={(e) => {
                 e.preventDefault()
                 commit(b)
               }}
             >
-              <span className="sb-item-title">{b.title}</span>
+              {/* CID is the primary label since that is what we searched on */}
+              <span className="sb-item-title">{b.cid}</span>
               <span className="sb-item-meta">
-                {[b.region ?? 'No region', fmtDate(b.start)].join(' · ')}
+                {[b.title, b.region ?? 'No region', fmtDate(b.start)].filter(Boolean).join(' · ')}
               </span>
             </li>
           ))}
@@ -281,10 +271,10 @@ function SearchBox({ bookings, onSelect }) {
 // Schedule – main page component
 // ===========================================================================
 export default function Schedule() {
-  const [bookings, setBookings]   = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState('')
-  const [viewStart, setViewStart] = useState(() => sundayOf(new Date()))
+  const [bookings, setBookings]     = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState('')
+  const [viewStart, setViewStart]   = useState(() => sundayOf(new Date()))
   const [selectedId, setSelectedId] = useState(null)
 
   const selected = bookings.find((b) => b.id === selectedId) || null
@@ -313,13 +303,8 @@ export default function Schedule() {
   }, [])
 
   // ── search → jump ──────────────────────────────────────────────────────
-  // Called by SearchBox when the user picks a suggestion.
-  // Shifts the 14-day window so the booking's start date sits near the
-  // left edge (3 days of padding), then opens its detail modal.
   function handleSearchSelect(booking) {
     const bookingDate = parseISO(booking.start)
-    // Go to the Sunday on or before (bookingDate - 3 days) so there is
-    // a little lead-in before the bar appears in the grid.
     const newStart = sundayOf(addDays(bookingDate, -3))
     setViewStart(newStart)
     setSelectedId(booking.id)
@@ -332,7 +317,6 @@ export default function Schedule() {
   )
   const today = strip(new Date())
 
-  // All bookings are always rendered – search only navigates, never hides.
   const rows = useMemo(() => {
     const hasNull = bookings.some((b) => b.region == null)
     return [...REGIONS, ...(hasNull ? ["__none"] : [])]
@@ -457,7 +441,13 @@ export default function Schedule() {
                   )
                 : 0
             const capState =
-              limit == null ? "" : peakBuilds > limit ? "over" : peakBuilds === limit ? "full" : ""
+              limit == null
+                ? ""
+                : peakBuilds > limit
+                  ? "over"
+                  : peakBuilds === limit
+                    ? "full"
+                    : ""
 
             return (
               <div className="sched-row-wrap" key={regionKey} style={{ display: "contents" }}>
@@ -562,10 +552,10 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
   const [notes,     setNotes]     = useState(b.privateNotes || "")
   const [region,    setRegion]    = useState(b.region)
 
-  const endTime      = pickTime && startTime ? computeEndTime(startTime, b.durationHours) : b.endTime
-  const workingDays  = isBuild ? Math.max(1, countWeekdays(start, end)) : 1
-  const hoursPerDay  = Math.round((b.durationHours / workingDays) * 10) / 10
-  const slots        = region ? (REGION_SLOTS[region] || []) : []
+  const endTime     = pickTime && startTime ? computeEndTime(startTime, b.durationHours) : b.endTime
+  const workingDays = isBuild ? Math.max(1, countWeekdays(start, end)) : 1
+  const hoursPerDay = Math.round((b.durationHours / workingDays) * 10) / 10
+  const slots       = region ? (REGION_SLOTS[region] || []) : []
 
   function onStartChange(iso) {
     if (!iso) return
