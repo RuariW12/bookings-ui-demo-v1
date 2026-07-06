@@ -174,6 +174,23 @@ export default function Schedule() {
     }
   }
 
+  // Hard-delete a booking, then drop it from local state so the bar and its
+  // capacity contribution disappear immediately.
+  const deleteBooking = async (id) => {
+    setError('')
+    try {
+      const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        let detail = `Delete failed (${res.status})`
+        try { detail = (await res.json()).detail || detail } catch {}
+        throw new Error(detail)
+      }
+      setBookings((prev) => prev.filter((b) => b.id !== id))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   return (
     <div className="sched">
       <div className="sched-toolbar">
@@ -189,7 +206,7 @@ export default function Schedule() {
         <span><i className="lg-build" />Build</span>
         <span><i className="lg-refresh" />MD Refresh</span>
         <span><i className="lg-cutover" />Cutover</span>
-        <span style={{ marginLeft: "auto" }}>Dashed = pending · faded = cancelled</span>
+        <span style={{ marginLeft: "auto" }}>Dashed = pending</span>
       </div>
 
       {error && <div className="sched-empty" style={{ color: '#c2410c' }}>{error}</div>}
@@ -284,8 +301,7 @@ export default function Schedule() {
           key={selected.id}
           b={selected}
           onSave={(patch) => patchBooking(selected.id, patch)}
-          onCancelBooking={() => patchBooking(selected.id, { status: "cancelled" })}
-          onRestore={() => patchBooking(selected.id, { status: "pending" })}
+          onDelete={() => deleteBooking(selected.id)}
           onClose={() => setSelectedId(null)}
         />
       )}
@@ -293,7 +309,7 @@ export default function Schedule() {
   )
 }
 
-function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
+function DetailModal({ b, onSave, onDelete, onClose }) {
   const isBuild = b.operationType === "build"
   const pickTime = b.operationType !== "build"
 
@@ -421,11 +437,9 @@ function DetailModal({ b, onSave, onCancelBooking, onRestore, onClose }) {
 
         <div className="alloc-buttons">
           <button className="btn-update" onClick={save}>Update</button>
-          <button className="btn-light" onClick={onClose}>Cancel</button>
+          <button className="btn-light" onClick={onClose}>Close</button>
           <span className="spacer" />
-          {b.status === "cancelled"
-            ? <button className="btn-link ok" onClick={() => { onRestore(); onClose() }}>Restore booking</button>
-            : <button className="btn-link danger" onClick={() => { onCancelBooking(); onClose() }}>Cancel booking</button>}
+          <button className="btn-link danger" onClick={() => { onDelete(); onClose() }}>Delete booking</button>
         </div>
       </div>
     </div>
