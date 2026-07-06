@@ -352,3 +352,54 @@ textarea.alloc-box { min-height: 64px; resize: vertical; }
   border-color: #2563eb;
   box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
 }
+
+/* ── SearchBox dropdown ──────────────────────────────────── */
+.sb-wrap {
+  position: relative;
+  width: 220px;
+}
+
+.sb-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.sb-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.sb-item:hover,
+.sb-item--active {
+  background: #f0f4ff;
+}
+
+.sb-item-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sb-item-meta {
+  font-size: 0.72rem;
+  color: #6b7280;
+}

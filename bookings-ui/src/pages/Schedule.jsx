@@ -1,7 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import './Schedule.css'
 import { REGIONS, REGION_BUILD_CAPACITY, REGION_SLOTS } from '../lib/bookings.js'
-import { OPERATING_HOURS } from '../lib/operatingHours'
 
 const NUM_DAYS = 14
 const LANE_H = 58
@@ -10,28 +9,60 @@ const PAD = 8
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 // --- date helpers ----------------------------------------------------------
-function parseISO(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d) }
+function parseISO(s) {
+  const [y, m, d] = s.split("-").map(Number)
+  return new Date(y, m - 1, d)
+}
 function fmtISO(d) {
-  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0")
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
   return `${y}-${m}-${day}`
 }
-function strip(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
-function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x }
-function dayDiff(a, b) { return Math.round((strip(a) - strip(b)) / 86400000) }
-function isWeekend(d) { const x = d.getDay(); return x === 0 || x === 6 }
-function sameDay(a, b) { return strip(a).getTime() === strip(b).getTime() }
-function sundayOf(d) { return addDays(strip(d), -d.getDay()) }
+function strip(d) {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x
+}
+function addDays(d, n) {
+  const x = new Date(d)
+  x.setDate(x.getDate() + n)
+  return x
+}
+function dayDiff(a, b) {
+  return Math.round((strip(a) - strip(b)) / 86400000)
+}
+function isWeekend(d) {
+  const x = d.getDay()
+  return x === 0 || x === 6
+}
+function sameDay(a, b) {
+  return strip(a).getTime() === strip(b).getTime()
+}
+function sundayOf(d) {
+  return addDays(strip(d), -d.getDay())
+}
 function countWeekdays(startISO, endISO) {
   let d = parseISO(startISO)
   const end = parseISO(endISO)
   let n = 0
-  while (d <= end) { if (!isWeekend(d)) n++; d = addDays(d, 1) }
+  while (d <= end) {
+    if (!isWeekend(d)) n++
+    d = addDays(d, 1)
+  }
   return n
 }
 function fmtRange(start) {
   const end = addDays(start, NUM_DAYS - 1)
   const opt = { month: "short", day: "numeric" }
   return `${start.toLocaleDateString("en-US", opt)} – ${end.toLocaleDateString("en-US", opt)}`
+}
+function fmtDate(iso) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  })
 }
 function computeEndTime(startLabel, hours) {
   const m = startLabel?.match(/(\d+):(\d+)\s*(AM|PM)/i)
@@ -40,12 +71,11 @@ function computeEndTime(startLabel, hours) {
   if (/PM/i.test(m[3])) h += 12
   const t = h * 60 + parseInt(m[2], 10) + hours * 60
   const totalH = Math.floor(t / 60)
-  const eh = totalH % 24, em = t % 60       // wrap past midnight
+  const eh = totalH % 24
+  const em = t % 60
   const nextDay = totalH >= 24
   return `${((eh + 11) % 12) + 1}:${String(em).padStart(2, "0")} ${eh >= 12 ? "PM" : "AM"}${nextDay ? " (+1d)" : ""}`
 }
-
-// nth business day (inclusive) forward from a start ISO date.
 function nthBusinessDay(startISO, n) {
   let d = parseISO(startISO)
   let count = 0
@@ -56,20 +86,24 @@ function nthBusinessDay(startISO, n) {
   return fmtISO(d)
 }
 
-// Backend stores only scheduled_date; end/duration/label are derived here from
-// operation type, mirroring the booking form's rules. Refresh duration assumes
-// 8h since tier isn't persisted on the booking record.
+// --- op meta ---------------------------------------------------------------
 const OP_META = {
   build:   { label: 'Environment Build', spanBusinessDays: 5, hours: 40 },
-  refresh: { label: 'MD Refresh',        spanBusinessDays: 1, hours: 8 },
-  cutover: { label: 'Cutover',           spanBusinessDays: 1, hours: 2 },
+  refresh: { label: 'MD Refresh',        spanBusinessDays: 1, hours: 8  },
+  cutover: { label: 'Cutover',           spanBusinessDays: 1, hours: 2  },
 }
 
-// Backend booking (snake_case) -> the shape this timeline renders.
 function toUI(b) {
-  const meta = OP_META[b.operation_type] || { label: b.operation_type, spanBusinessDays: 1, hours: 0 }
+  const meta = OP_META[b.operation_type] || {
+    label: b.operation_type,
+    spanBusinessDays: 1,
+    hours: 0,
+  }
   const start = b.scheduled_date
-  const end = b.operation_type === 'build' ? nthBusinessDay(start, meta.spanBusinessDays) : start
+  const end =
+    b.operation_type === 'build'
+      ? nthBusinessDay(start, meta.spanBusinessDays)
+      : start
   return {
     id: b.id,
     operationType: b.operation_type,
@@ -89,38 +123,173 @@ function toUI(b) {
   }
 }
 
-// Greedy lane assignment so overlapping bookings in a region stack instead of collide.
+// --- lane helpers ----------------------------------------------------------
 function assignLanes(items) {
   const laneEnds = []
   return items.map((it) => {
-    const s = parseISO(it.start), e = parseISO(it.end)
+    const s = parseISO(it.start)
+    const e = parseISO(it.end)
     let lane = laneEnds.findIndex((end) => s > end)
-    if (lane === -1) { lane = laneEnds.length; laneEnds.push(e) } else { laneEnds[lane] = e }
+    if (lane === -1) {
+      lane = laneEnds.length
+      laneEnds.push(e)
+    } else {
+      laneEnds[lane] = e
+    }
     return { ...it, lane }
   })
 }
 
-// Most builds running on the same day within the visible window
 function peakConcurrentBuilds(builds, days) {
   let peak = 0
   for (const d of days) {
     let c = 0
-    for (const b of builds) if (parseISO(b.start) <= d && d <= parseISO(b.end)) c++
+    for (const b of builds) {
+      if (parseISO(b.start) <= d && d <= parseISO(b.end)) c++
+    }
     if (c > peak) peak = c
   }
   return peak
 }
 
+// ===========================================================================
+// SearchBox – inlined component
+// ===========================================================================
+function SearchBox({ bookings, onSelect }) {
+  const [query, setQuery]   = useState('')
+  const [open, setOpen]     = useState(false)
+  const [cursor, setCursor] = useState(-1)
+  const containerRef        = useRef(null)
+  const inputRef            = useRef(null)
+
+  // Derive suggestions: match on title, de-dupe by company name, cap at 8
+  const suggestions = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return []
+    const seen = new Set()
+    const hits = []
+    for (const b of bookings) {
+      const t = (b.title || '').toLowerCase()
+      if (!t.includes(q)) continue
+      if (seen.has(b.title)) continue
+      seen.add(b.title)
+      hits.push(b)
+      if (hits.length === 8) break
+    }
+    return hits
+  }, [query, bookings])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handlePointerDown(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false)
+        setCursor(-1)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [])
+
+  // Reset cursor when suggestion list changes length
+  useEffect(() => {
+    setCursor(-1)
+  }, [suggestions.length])
+
+  const commit = useCallback(
+    (booking) => {
+      setQuery('')
+      setOpen(false)
+      setCursor(-1)
+      onSelect(booking)
+    },
+    [onSelect],
+  )
+
+  function handleChange(e) {
+    setQuery(e.target.value)
+    setOpen(true)
+    setCursor(-1)
+  }
+
+  function handleKeyDown(e) {
+    if (!open || suggestions.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setCursor((c) => Math.min(c + 1, suggestions.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setCursor((c) => Math.max(c - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const target = cursor >= 0 ? suggestions[cursor] : suggestions[0]
+      if (target) commit(target)
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      setCursor(-1)
+      inputRef.current?.blur()
+    }
+  }
+
+  return (
+    <div className="sb-wrap" ref={containerRef}>
+      <input
+        ref={inputRef}
+        className="sched-search"
+        type="text"
+        placeholder="Search company…"
+        value={query}
+        autoComplete="off"
+        spellCheck={false}
+        onChange={handleChange}
+        onFocus={() => query.trim() && setOpen(true)}
+        onKeyDown={handleKeyDown}
+        aria-haspopup="listbox"
+        aria-expanded={open && suggestions.length > 0}
+        aria-autocomplete="list"
+      />
+
+      {open && suggestions.length > 0 && (
+        <ul className="sb-dropdown" role="listbox">
+          {suggestions.map((b, i) => (
+            <li
+              key={b.id}
+              role="option"
+              aria-selected={i === cursor}
+              className={'sb-item' + (i === cursor ? ' sb-item--active' : '')}
+              // pointerdown fires before the input's blur event,
+              // so we can safely commit here without the dropdown
+              // closing prematurely from a focus-out handler
+              onPointerDown={(e) => {
+                e.preventDefault()
+                commit(b)
+              }}
+            >
+              <span className="sb-item-title">{b.title}</span>
+              <span className="sb-item-meta">
+                {[b.region ?? 'No region', fmtDate(b.start)].join(' · ')}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ===========================================================================
+// Schedule – main page component
+// ===========================================================================
 export default function Schedule() {
-  const [bookings, setBookings] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [bookings, setBookings]   = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState('')
   const [viewStart, setViewStart] = useState(() => sundayOf(new Date()))
   const [selectedId, setSelectedId] = useState(null)
-  const [searchTerm, setSearchTerm] = useState('')
 
   const selected = bookings.find((b) => b.id === selectedId) || null
 
+  // ── data fetching ──────────────────────────────────────────────────────
   async function refresh() {
     setLoading(true)
     try {
@@ -134,6 +303,7 @@ export default function Schedule() {
       setLoading(false)
     }
   }
+
   useEffect(() => { refresh() }, [])
 
   useEffect(() => {
@@ -142,32 +312,33 @@ export default function Schedule() {
     return () => window.removeEventListener("keydown", onKey)
   }, [])
 
+  // ── search → jump ──────────────────────────────────────────────────────
+  // Called by SearchBox when the user picks a suggestion.
+  // Shifts the 14-day window so the booking's start date sits near the
+  // left edge (3 days of padding), then opens its detail modal.
+  function handleSearchSelect(booking) {
+    const bookingDate = parseISO(booking.start)
+    // Go to the Sunday on or before (bookingDate - 3 days) so there is
+    // a little lead-in before the bar appears in the grid.
+    const newStart = sundayOf(addDays(bookingDate, -3))
+    setViewStart(newStart)
+    setSelectedId(booking.id)
+  }
+
+  // ── derived data ────────────────────────────────────────────────────────
   const days = useMemo(
     () => Array.from({ length: NUM_DAYS }, (_, i) => addDays(viewStart, i)),
-    [viewStart]
+    [viewStart],
   )
   const today = strip(new Date())
 
-  // Filter by company name / title
-  const filteredBookings = useMemo(
-    () => {
-      const term = searchTerm.trim().toLowerCase()
-      if (!term) return bookings
-      return bookings.filter((b) =>
-        (b.title || '').toLowerCase().includes(term)
-      )
-    },
-    [bookings, searchTerm]
-  )
-
-  // rows = known regions + an "Unassigned" row if any booking has region == null
+  // All bookings are always rendered – search only navigates, never hides.
   const rows = useMemo(() => {
-    const hasNull = filteredBookings.some((b) => b.region == null)
+    const hasNull = bookings.some((b) => b.region == null)
     return [...REGIONS, ...(hasNull ? ["__none"] : [])]
-  }, [filteredBookings])
+  }, [bookings])
 
-  // Persist an edit to the backend, then re-fetch so the timeline reflects
-  // exactly what was saved. `patch` uses backend (snake_case) field names.
+  // ── mutations ───────────────────────────────────────────────────────────
   const patchBooking = async (id, patch) => {
     setError('')
     try {
@@ -187,8 +358,6 @@ export default function Schedule() {
     }
   }
 
-  // Hard-delete a booking, then drop it from local state so the bar and its
-  // capacity contribution disappear immediately.
   const deleteBooking = async (id) => {
     setError('')
     try {
@@ -199,30 +368,39 @@ export default function Schedule() {
         throw new Error(detail)
       }
       setBookings((prev) => prev.filter((b) => b.id !== id))
+      setSelectedId(null)
     } catch (e) {
       setError(e.message)
     }
   }
 
+  // ── render ──────────────────────────────────────────────────────────────
   return (
     <div className="sched">
       <div className="sched-toolbar">
         <h2>Parallel build schedule</h2>
 
-        {/* Search bar */}
-        <input
-          className="sched-search"
-          type="text"
-          placeholder="Search by company name..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        <SearchBox bookings={bookings} onSelect={handleSearchSelect} />
 
         <div className="spacer" />
         <span className="sched-range">{fmtRange(viewStart)}</span>
-        <button className="sched-nav" aria-label="Previous two weeks" onClick={() => setViewStart(addDays(viewStart, -7))}>‹</button>
-        <button className="sched-btn" onClick={() => setViewStart(sundayOf(new Date()))}>Today</button>
-        <button className="sched-nav" aria-label="Next two weeks" onClick={() => setViewStart(addDays(viewStart, 7))}>›</button>
+        <button
+          className="sched-nav"
+          aria-label="Previous two weeks"
+          onClick={() => setViewStart(addDays(viewStart, -7))}
+        >
+          ‹
+        </button>
+        <button className="sched-btn" onClick={() => setViewStart(sundayOf(new Date()))}>
+          Today
+        </button>
+        <button
+          className="sched-nav"
+          aria-label="Next two weeks"
+          onClick={() => setViewStart(addDays(viewStart, 7))}
+        >
+          ›
+        </button>
       </div>
 
       <div className="sched-legend">
@@ -232,35 +410,54 @@ export default function Schedule() {
         <span style={{ marginLeft: "auto" }}>Dashed = pending</span>
       </div>
 
-      {error && <div className="sched-empty" style={{ color: '#c2410c' }}>{error}</div>}
+      {error && (
+        <div className="sched-empty" style={{ color: '#c2410c' }}>{error}</div>
+      )}
 
       <div className="sched-scroll">
         <div className="sched-board">
-          {/* header */}
+          {/* ── column headers ── */}
           <div className="sched-corner" />
           {days.map((d, i) => (
-            <div key={i} className={"sched-dayhead" + (isWeekend(d) ? " weekend" : "") + (sameDay(d, today) ? " today" : "")}>
+            <div
+              key={i}
+              className={
+                "sched-dayhead" +
+                (isWeekend(d) ? " weekend" : "") +
+                (sameDay(d, today) ? " today" : "")
+              }
+            >
               <span className="dow">{DOW[d.getDay()]}</span>
               <span className="dom">{d.getDate()}</span>
             </div>
           ))}
 
-          {/* region rows */}
+          {/* ── region rows ── */}
           {rows.map((regionKey) => {
             const region = regionKey === "__none" ? null : regionKey
-            const items = filteredBookings.filter((b) => b.region === region)
-            const laid = assignLanes([...items].sort((a, b) => parseISO(a.start) - parseISO(b.start)))
+            const items  = bookings.filter((b) => b.region === region)
+            const laid   = assignLanes(
+              [...items].sort((a, b) => parseISO(a.start) - parseISO(b.start)),
+            )
             const laneCount = Math.max(1, ...laid.map((it) => it.lane + 1))
-            const trackH = laneCount * (LANE_H + LANE_GAP) - LANE_GAP + PAD * 2
+            const trackH    = laneCount * (LANE_H + LANE_GAP) - LANE_GAP + PAD * 2
+
             const weekHours = items
               .filter((b) => b.status !== "cancelled")
               .reduce((sum, b) => sum + (b.durationHours || 0), 0)
 
             const limit = region != null ? REGION_BUILD_CAPACITY[region] : undefined
-            const peakBuilds = limit != null
-              ? peakConcurrentBuilds(items.filter((b) => b.operationType === "build" && b.status !== "cancelled"), days)
-              : 0
-            const capState = limit == null ? "" : peakBuilds > limit ? "over" : peakBuilds === limit ? "full" : ""
+            const peakBuilds =
+              limit != null
+                ? peakConcurrentBuilds(
+                    items.filter(
+                      (b) => b.operationType === "build" && b.status !== "cancelled",
+                    ),
+                    days,
+                  )
+                : 0
+            const capState =
+              limit == null ? "" : peakBuilds > limit ? "over" : peakBuilds === limit ? "full" : ""
 
             return (
               <div className="sched-row-wrap" key={regionKey} style={{ display: "contents" }}>
@@ -271,7 +468,10 @@ export default function Schedule() {
                   </div>
                   <div className="rl-cap">
                     {limit != null && (
-                      <div className={"rl-builds " + capState} title="Peak concurrent builds in view / capacity">
+                      <div
+                        className={"rl-builds " + capState}
+                        title="Peak concurrent builds in view / capacity"
+                      >
                         {peakBuilds}/{limit} builds
                       </div>
                     )}
@@ -282,28 +482,42 @@ export default function Schedule() {
                 <div className="sched-track" style={{ minHeight: trackH }}>
                   <div className="sched-track-bg">
                     {days.map((d, i) => (
-                      <div key={i} className={"sched-bgcell" + (isWeekend(d) ? " weekend" : "") + (sameDay(d, today) ? " today" : "")} />
+                      <div
+                        key={i}
+                        className={
+                          "sched-bgcell" +
+                          (isWeekend(d) ? " weekend" : "") +
+                          (sameDay(d, today) ? " today" : "")
+                        }
+                      />
                     ))}
                   </div>
 
                   {laid.map((b) => {
                     const startIdx = dayDiff(parseISO(b.start), viewStart)
-                    const endIdx = dayDiff(parseISO(b.end), viewStart)
-                    if (endIdx < 0 || startIdx > NUM_DAYS - 1) return null // off-window
-                    const cs = Math.max(startIdx, 0)
-                    const ce = Math.min(endIdx, NUM_DAYS - 1)
-                    const left = (cs / NUM_DAYS) * 100
+                    const endIdx   = dayDiff(parseISO(b.end),   viewStart)
+                    if (endIdx < 0 || startIdx > NUM_DAYS - 1) return null
+                    const cs    = Math.max(startIdx, 0)
+                    const ce    = Math.min(endIdx, NUM_DAYS - 1)
+                    const left  = (cs / NUM_DAYS) * 100
                     const width = ((ce - cs + 1) / NUM_DAYS) * 100
-                    const top = PAD + b.lane * (LANE_H + LANE_GAP)
+                    const top   = PAD + b.lane * (LANE_H + LANE_GAP)
                     return (
                       <button
                         key={b.id}
                         className={`sched-bar bar-${b.operationType} status-${b.status}`}
-                        style={{ left: `${left}%`, width: `calc(${width}% - 4px)`, top, height: LANE_H }}
+                        style={{
+                          left: `${left}%`,
+                          width: `calc(${width}% - 4px)`,
+                          top,
+                          height: LANE_H,
+                        }}
                         onClick={() => setSelectedId(b.id)}
                       >
                         <span className="b-title">{b.title || b.operationLabel}</span>
-                        <span className="b-sub">{[b.cid, b.environment].filter(Boolean).join(" · ")}</span>
+                        <span className="b-sub">
+                          {[b.cid, b.environment].filter(Boolean).join(" · ")}
+                        </span>
                         <span className="b-foot">
                           {b.startTime ? `${b.startTime} · ` : ""}{b.durationHours}h
                         </span>
@@ -317,10 +531,8 @@ export default function Schedule() {
         </div>
       </div>
 
-      {!loading && filteredBookings.length === 0 && (
-        <div className="sched-empty">
-          {searchTerm ? 'No bookings match this company name.' : 'No bookings yet.'}
-        </div>
+      {!loading && bookings.length === 0 && (
+        <div className="sched-empty">No bookings yet.</div>
       )}
 
       {selected && (
@@ -336,44 +548,43 @@ export default function Schedule() {
   )
 }
 
+// ===========================================================================
+// DetailModal
+// ===========================================================================
 function DetailModal({ b, onSave, onDelete, onClose }) {
-  const isBuild = b.operationType === "build"
+  const isBuild  = b.operationType === "build"
   const pickTime = b.operationType !== "build"
 
-  const [title, setTitle] = useState(b.title || b.operationLabel || "")
-  const [start, setStart] = useState(b.start)
-  const [end, setEnd] = useState(b.end)
+  const [title,     setTitle]     = useState(b.title || b.operationLabel || "")
+  const [start,     setStart]     = useState(b.start)
+  const [end,       setEnd]       = useState(b.end)
   const [startTime, setStartTime] = useState(b.startTime || "")
-  const [notes, setNotes] = useState(b.privateNotes || "")
-  const [region, setRegion] = useState(b.region)
+  const [notes,     setNotes]     = useState(b.privateNotes || "")
+  const [region,    setRegion]    = useState(b.region)
 
-  const endTime = pickTime && startTime ? computeEndTime(startTime, b.durationHours) : b.endTime
-  const workingDays = isBuild ? Math.max(1, countWeekdays(start, end)) : 1
-  const hoursPerDay = Math.round((b.durationHours / workingDays) * 10) / 10
+  const endTime      = pickTime && startTime ? computeEndTime(startTime, b.durationHours) : b.endTime
+  const workingDays  = isBuild ? Math.max(1, countWeekdays(start, end)) : 1
+  const hoursPerDay  = Math.round((b.durationHours / workingDays) * 10) / 10
+  const slots        = region ? (REGION_SLOTS[region] || []) : []
 
-  // Region selects which slot list applies; times are US Eastern.
-  const slots = region ? (REGION_SLOTS[region] || []) : []
-
-  // Moving the start date shifts the whole window, preserving its length.
-  const onStartChange = (iso) => {
+  function onStartChange(iso) {
     if (!iso) return
     if (isBuild) {
       const delta = dayDiff(parseISO(iso), parseISO(start))
       setEnd(fmtISO(addDays(parseISO(end), delta)))
       setStart(iso)
     } else {
-      setStart(iso); setEnd(iso)
+      setStart(iso)
+      setEnd(iso)
     }
   }
 
-  const save = () => {
-    // Map the modal's UI fields back to backend column names. Build end is
-    // derived from the start on render, so only scheduled_date is sent.
+  function save() {
     onSave({
-      company_name: title,
+      company_name:   title,
       scheduled_date: start,
-      region: region || null,
-      notes: notes || null,
+      region:         region || null,
+      notes:          notes || null,
       ...(pickTime ? { scheduled_time: startTime } : {}),
     })
     onClose()
@@ -406,7 +617,11 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
                   Duration: {workingDays} working day{workingDays === 1 ? "" : "s"}
                 </span>
                 <div className="date-range">
-                  <input type="date" value={start} onChange={(e) => onStartChange(e.target.value)} />
+                  <input
+                    type="date"
+                    value={start}
+                    onChange={(e) => onStartChange(e.target.value)}
+                  />
                   {isBuild && (
                     <>
                       <span className="chev">›</span>
@@ -422,9 +637,16 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
                 <span className="stat-label">
                   Start time <small className="muted">(US Eastern)</small>
                 </span>
-                <select value={slots.includes(startTime) ? startTime : ""} onChange={(e) => setStartTime(e.target.value)}>
-                  {!slots.includes(startTime) && <option value="">{startTime || "—"}</option>}
-                  {slots.map((t) => <option key={t} value={t}>{t}</option>)}
+                <select
+                  value={slots.includes(startTime) ? startTime : ""}
+                  onChange={(e) => setStartTime(e.target.value)}
+                >
+                  {!slots.includes(startTime) && (
+                    <option value="">{startTime || "—"}</option>
+                  )}
+                  {slots.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
                 </select>
                 <span className="muted">– {endTime}</span>
               </div>
@@ -433,12 +655,18 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
 
           <div className="alloc-field">
             <label>Project</label>
-            <div className="alloc-box ro">{[b.cid, b.environment].filter(Boolean).join(" / ") || "—"}</div>
+            <div className="alloc-box ro">
+              {[b.cid, b.environment].filter(Boolean).join(" / ") || "—"}
+            </div>
           </div>
 
           <div className="alloc-field">
             <label>Task</label>
-            <input className="alloc-box" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input
+              className="alloc-box"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
           </div>
 
           <div className="alloc-field">
@@ -453,20 +681,33 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
 
           <div className="alloc-field">
             <label>Region</label>
-            <select className="alloc-box" value={region || ""} onChange={(e) => setRegion(e.target.value || null)}>
+            <select
+              className="alloc-box"
+              value={region || ""}
+              onChange={(e) => setRegion(e.target.value || null)}
+            >
               <option value="">Unassigned</option>
-              {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+              {REGIONS.map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
             </select>
           </div>
 
-          {b.bookerName && <div className="alloc-meta">Booked by {b.bookerName}</div>}
+          {b.bookerName && (
+            <div className="alloc-meta">Booked by {b.bookerName}</div>
+          )}
         </div>
 
         <div className="alloc-buttons">
           <button className="btn-update" onClick={save}>Update</button>
           <button className="btn-light" onClick={onClose}>Close</button>
           <span className="spacer" />
-          <button className="btn-link danger" onClick={() => { onDelete(); onClose() }}>Delete booking</button>
+          <button
+            className="btn-link danger"
+            onClick={() => { onDelete(); onClose() }}
+          >
+            Delete booking
+          </button>
         </div>
       </div>
     </div>
