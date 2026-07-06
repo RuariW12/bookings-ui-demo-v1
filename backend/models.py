@@ -1,21 +1,15 @@
 from pydantic import BaseModel
 from datetime import datetime
-
-
 class UserCreate(BaseModel):
     email: str
     display_name: str
     role: str  # requester | approver | admin
     regions: list[str] = []
-
-
 class UserUpdate(BaseModel):
     display_name: str | None = None
     role: str | None = None
     regions: list[str] | None = None
     active: bool | None = None
-
-
 class UserOut(BaseModel):
     id: int
     email: str
@@ -26,8 +20,6 @@ class UserOut(BaseModel):
     seeded: bool
     created_at: datetime
     updated_at: datetime
-
-
 class BookingCreate(BaseModel):
     operation_type: str  # environment_build | md_refresh | cutover
     region: str  # CLD-HQ | CLD-CTC | CLD-EMEA
@@ -41,8 +33,6 @@ class BookingCreate(BaseModel):
     notes: str | None = None
     requester_email: str | None = None
     requester_name: str | None = None
-
-
 class BookingUpdate(BaseModel):
     # General edit for the schedule view. Approval is NOT handled here — it stays
     # on the region-guarded approve endpoint. Status here covers cancel/restore.
@@ -56,12 +46,10 @@ class BookingUpdate(BaseModel):
     host_region: str | None = None
     notes: str | None = None
     status: str | None = None  # pending | cancelled
-
-
 class BookingOut(BaseModel):
     id: int
-    operation_type: str
-    region: str
+    operation_type: str | None = None
+    region: str | None = None
     scheduled_date: str
     scheduled_time: str
     company_name: str | None
@@ -78,12 +66,8 @@ class BookingOut(BaseModel):
     servicenow_case_id: str | None
     created_at: datetime
     updated_at: datetime
-
-
 class CompanySearch(BaseModel):
     query: str
-
-
 class CaseCreate(BaseModel):
     short_description: str
     description: str | None = None
