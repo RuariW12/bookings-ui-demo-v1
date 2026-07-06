@@ -131,3 +131,10 @@ async def reject_booking(booking_id: int, approver_email: str):
         booking_id, approver_email,
     )
     return dict(row)
+
+@router.delete("/{booking_id}", status_code=204)
+async def delete_booking(booking_id: int):
+    pool = await get_pool()
+    result = await pool.execute("DELETE FROM bookings WHERE id = $1", booking_id)
+    if result == "DELETE 0":
+        raise HTTPException(404, "Booking not found")
