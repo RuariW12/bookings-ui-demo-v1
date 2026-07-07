@@ -31,6 +31,7 @@ function toUI(b) {
     environment: b.environment_name || '',
     environmentId: b.environment_id || '',
     status: b.status,
+    serviceNowCaseId: b.servicenow_case_id || '',
     submittedBy: b.requester_email || '',
     submittedAt: b.created_at || '',
     csm: b.requester_name || '',
@@ -233,6 +234,11 @@ export default function Approvals() {
                       <span className="dot" />
                       {STATUS_LABELS[b.status] || b.status}
                     </span>
+                    {b.status === 'approved' && !b.serviceNowCaseId && (
+                      <span className="no-case-badge" title="Approved without a ServiceNow case (manual-entry booking)">
+                        No SNOW case
+                      </span>
+                    )}
                   </td>
                   <td className="col-submitted">
                     <div className="meta-text">{b.submittedBy ? b.submittedBy.split('@')[0].replace('.', ' ') : '—'}</div>
@@ -282,6 +288,7 @@ export default function Approvals() {
                       <dl className="detail-grid">
                         <div><dt>Environment</dt><dd>{b.environment || '—'}</dd></div>
                         <div><dt>Environment ID</dt><dd>{b.environmentId || '—'}</dd></div>
+                        <div><dt>SNOW Case</dt><dd>{b.serviceNowCaseId || '— none —'}</dd></div>
                         <div><dt>Start Time</dt><dd>{b.startTime || '—'}</dd></div>
                         <div><dt>End Time</dt><dd>{b.endTime || '—'}</dd></div>
                         <div><dt>CSM</dt><dd>{b.csm || '—'}</dd></div>
