@@ -120,6 +120,8 @@ function toUI(b) {
     status: b.status,
     privateNotes: b.notes || '',
     bookerName: b.requester_name || '',
+    status: b.status,
+    serviceNowCaseId: b.servicenow_case_id || '',
   }
 }
 
@@ -510,6 +512,9 @@ export default function Schedule() {
                         </span>
                         <span className="b-foot">
                           {b.startTime ? `${b.startTime} · ` : ""}{b.durationHours}h
+                          {b.status === 'approved' && !b.serviceNowCaseId && (
+                            <span className="no-case-badge" title="Approved without a ServiceNow case (manual-entry booking)">No SNOW case</span>
+                          )}
                         </span>
                       </button>
                     )
