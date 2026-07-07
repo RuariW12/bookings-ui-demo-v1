@@ -2,16 +2,10 @@ import httpx
 from fastapi import HTTPException
 from config import settings
 
-# DSI record column -> environment output key.
-# CONFIRM the four GUESS fields against a real Postman GET on u_cmdb_ci_dsi.
-DSI_FIELD_MAP = {
-    "environmentId": "u_environment_id",  # GUESS - the "I-XXXXXX" identifier
-    "environment": "name",                # GUESS - display name
-    "tier": "u_environment",              # GUESS - DEV | PROD
-    "hostRegion": "u_host_region",        # GUESS
-    # status, sys_id, migration flag handled explicitly below (confirmed)
-}
-
+# Confirmed u_cmdb_ci_dsi columns (live-verified):
+#   sys_id, name, u_platform, u_version, u_dsi_cloenv, u_status_2, u_migration_mce
+# No tier column and no host-region column exist on this table.
+# DSI number is parsed from `name` ("I-XXXXXX - ..."), not a dedicated field.
 
 def _client() -> httpx.AsyncClient:
     if not settings.snow_instance:
@@ -23,14 +17,18 @@ def _client() -> httpx.AsyncClient:
         timeout=15.0,
     )
 
-
 def _dsi_to_environment(row: dict) -> dict:
-    env = {key: row.get(col, "") for key, col in DSI_FIELD_MAP.items()}
-    env["status"] = "active"  # query already filters u_status_2=Active
-    env["sysId"] = row.get("sys_id", "")        # becomes u_dsi on case POST
-    env["isMigrationTarget"] = row.get("u_migration_mce") in (True, "true", "1")
-    return env
-
+    name = row.get("name", "") or ""
+    return {
+        "sys_id": row.get("sys_id", ""),                 # -> case u_dsi
+        "dsiNumber": name.split(" - ")[0].strip(),       # "I-134845"
+        "displayName": name,
+        "platform": row.get("u_platform", ""),           # MCE | MEP
+        "version": row.get("u_version", ""),             # "2021", etc.
+        "cluster": row.get("u_dsi_cloenv", ""),          # MCE-only, else ""
+        "status": row.get("u_status_2", ""),             # "Active"
+        "migrationTarget": row.get("u_migration_mce") in (True, "true", "1"),
+    }
 
 async def list_companies() -> list[dict]:
     async with _client() as client:
@@ -45,10 +43,9 @@ async def list_companies() -> list[dict]:
         if resp.status_code != 200:
             raise HTTPException(resp.status_code, "ServiceNow company list failed")
         return [
-            {"cid": r.get("number"), "name": r.get("name")}
+            {"cid": r.get("number"), "name": r.get("name"), "sys_id": r.get("sys_id")}
             for r in resp.json().get("result", [])
         ]
-
 
 async def get_company(cid: str) -> dict:
     async with _client() as client:
@@ -71,6 +68,7 @@ async def get_company(cid: str) -> dict:
             "/api/now/table/u_cmdb_ci_dsi",
             params={
                 "sysparm_query": f"u_account={account['sys_id']}^u_status_2=Active",
+                "sysparm_fields": "sys_id,name,u_platform,u_version,u_dsi_cloenv,u_status_2,u_migration_mce",
                 "sysparm_limit": "50",
             },
         )
@@ -81,10 +79,9 @@ async def get_company(cid: str) -> dict:
         return {
             "cid": account.get("number"),
             "name": account.get("name"),
-            "accountSysId": account.get("sys_id"),
+            "sys_id": account.get("sys_id"),
             "environments": environments,
         }
-
 
 async def create_case(payload: dict) -> dict:
     async with _client() as client:
