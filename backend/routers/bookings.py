@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from database import get_pool
 from models import BookingCreate, BookingUpdate, BookingOut
+from snow import create_case
 
 router = APIRouter(prefix="/api/bookings", tags=["bookings"])
 
@@ -10,6 +11,34 @@ EDITABLE = (
     "region", "scheduled_date", "scheduled_time", "company_name", "company_id",
     "environment_id", "environment_name", "host_region", "notes",
 )
+
+# Case fields not stored on the booking. VERIFY these picklist values with a
+# test POST to dev SNOW before trusting them.
+CASE_DEFAULTS = {
+    "u_environment": "PROD",        # "PROD" confirmed live; "DEV" assumed
+    "u_product_version": "2021",    # UNVERIFIED — live record showed "MicroStrategy ONE"
+    "u_severity": "Sev 3",          # only "Sev 4" confirmed live
+    "priority": "4",
+}
+
+
+def _build_case_payload(booking: dict, approver_email: str) -> dict:
+    return {
+        "short_description":
+            f"{booking['operation_type']} — {booking.get('company_name') or ''}".strip(" —"),
+        "description": (
+            f"Region: {booking.get('region') or '—'}\n"
+            f"Environment: {booking.get('environment_name') or '—'}\n"
+            f"Scheduled: {booking.get('scheduled_date') or '—'} "
+            f"{booking.get('scheduled_time') or ''}".rstrip()
+            + f"\nRequester: {booking.get('requester_name') or booking.get('requester_email') or '—'}"
+            + f"\nApproved by: {approver_email}"
+        ),
+        "contact_type": "web",
+        "account": booking["company_id"],       # SNOW account sys_id
+        "u_dsi": booking["environment_id"],      # SNOW DSI sys_id
+        **CASE_DEFAULTS,
+    }
 
 
 @router.get("", response_model=list[BookingOut])
@@ -98,11 +127,20 @@ async def approve_booking(booking_id: int, approver_email: str):
     if approver["role"] == "approver" and existing["region"] not in list(approver["regions"] or []):
         raise HTTPException(403, "Not authorized to approve bookings in this region")
 
+    # Create the SNOW case first. If it fails, the exception propagates and the
+    # booking stays pending (retryable). Manual-entry bookings have null sys_ids
+    # -> skip case creation, approve anyway (flagged flaw, deferred).
+    booking = dict(existing)
+    case_id = None
+    if booking["company_id"] and booking["environment_id"]:
+        result = await create_case(_build_case_payload(booking, approver_email))
+        case_id = result["number"]
+
     row = await pool.fetchrow(
         """UPDATE bookings SET status = 'approved', approved_by = $2,
-               approved_at = now(), updated_at = now()
+               approved_at = now(), servicenow_case_id = $3, updated_at = now()
            WHERE id = $1 RETURNING *""",
-        booking_id, approver_email,
+        booking_id, approver_email, case_id,
     )
     return dict(row)
 
