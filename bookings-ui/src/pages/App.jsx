@@ -205,6 +205,8 @@ function App() {
   const [cid, setCid] = useState("")
   const [environment, setEnvironment] = useState("")
   const [environmentId, setEnvironmentId] = useState("")
+  const [companySysId, setCompanySysId] = useState("")       // SNOW account sys_id → case "account"
+  const [environmentSysId, setEnvironmentSysId] = useState("") // SNOW DSI sys_id → case "u_dsi"
   const [companyQuery, setCompanyQuery] = useState("")
   const [company, setCompany] = useState(null)       // resolved SNOW company record
   const [manualEntry, setManualEntry] = useState(false)
@@ -285,8 +287,8 @@ function App() {
   const takenSet = region && date && cfg?.pickTime ? takenSlots(region, date) : new Set()
   const freeSlots = regionSlots.filter((s) => !takenSet.has(s))
 
-  const selectedEnv = company && environmentId
-    ? company.environments.find((e) => e.environmentId === environmentId)
+  const selectedEnv = company && environmentSysId
+    ? company.environments.find((e) => e.sys_id === environmentSysId)
     : null
 
   const prevMonth = () => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))
@@ -331,6 +333,7 @@ function App() {
     if (company) {
       setCompany(null)
       setEntitlement(""); setEnvironment(""); setEnvironmentId("")
+      setCompanySysId(""); setEnvironmentSysId("")
     }
     setManualEntry(false)
   }
@@ -339,10 +342,11 @@ function App() {
     const c = await getCompany(selCid)
     setCompany(c)
     setCid(c?.cid ?? "")
-    setEntitlement(c?.entitlement ?? "")
+    setCompanySysId(c?.sys_id ?? "")
     setCompanyQuery(c ? `${c.name} · ${c.cid}` : "")
     setEnvironment("")
     setEnvironmentId("")
+    setEnvironmentSysId("")
     setManualEntry(false)
   }
 
@@ -360,13 +364,12 @@ function App() {
     }
   }
 
-  const onSelectEnvironment = (envId) => {
-    const env = company?.environments.find((e) => e.environmentId === envId)
+  const onSelectEnvironment = (sysId) => {
+    const env = company?.environments.find((e) => e.sys_id === sysId)
     if (!env) return
-    setEnvironment(env.environment)
-    setEnvironmentId(env.environmentId)
-    // SNOW knows the tier — adopt it for refresh sizing when it's present.
-    if (env.tier && operationType === "refresh") setTier(env.tier)
+    setEnvironmentSysId(env.sys_id)
+    setEnvironmentId(env.dsiNumber)     // human "I-134845"
+    setEnvironment(env.displayName)
   }
 
   // Is `day` a valid choice given the selected operation type?
@@ -413,7 +416,6 @@ function App() {
       region,
       companyName: company?.name ?? null,
       entitlement, cid, environment, environmentId,
-      hostRegion: selectedEnv?.hostRegion ?? null,   // from SNOW — seeds the safe-harbour check
       buildWindowStart: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[0]) : null,
       buildWindowEnd: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[buildSpan.length - 1]) : null,
       date: operationType !== "build" && date ? fmtISO(date) : null,
@@ -442,10 +444,10 @@ function App() {
         : payload.date,
       scheduled_time: payload.startTime ?? "",
       company_name: payload.companyName,
-      company_id: cid || null,
-      environment_id: environmentId || null,
+      company_id: companySysId || null,          // SNOW account sys_id → case "account"
+      environment_id: environmentSysId || null,  // SNOW DSI sys_id → case "u_dsi"
       environment_name: environment || null,
-      host_region: payload.hostRegion,
+      host_region: null,                         // no host-region field in SNOW
       notes: privateNotes || null,
       requester_email: csmEmail || null,
       requester_name: bookerName || null,
@@ -567,11 +569,11 @@ function App() {
           <>
             <div className="field">
               <label>Environment</label>
-              <select value={environmentId} onChange={(e) => onSelectEnvironment(e.target.value)}>
+              <select value={environmentSysId} onChange={(e) => onSelectEnvironment(e.target.value)}>
                 <option value="">-- select an environment --</option>
                 {activeEnvironments(company).map((env) => (
-                  <option key={env.environmentId} value={env.environmentId}>
-                    {env.environment} · {env.environmentId}
+                  <option key={env.sys_id} value={env.sys_id}>
+                    {env.displayName}
                   </option>
                 ))}
               </select>
@@ -579,9 +581,10 @@ function App() {
 
             {selectedEnv && (
               <div className="warning-box" style={{ background: "#f2f7f0", borderColor: "#bcd4b4" }}>
-                <div>Entitlement: <strong>{entitlement || "—"}</strong></div>
                 <div>Environment ID: <strong>{environmentId}</strong></div>
-                <div>Host region: <strong>{selectedEnv.hostRegion || "—"}</strong></div>
+                <div>Platform: <strong>{selectedEnv.platform || "—"}</strong></div>
+                <div>Version: <strong>{selectedEnv.version || "—"}</strong></div>
+                {selectedEnv.cluster && <div>Cluster: <strong>{selectedEnv.cluster}</strong></div>}
               </div>
             )}
 
