@@ -13,6 +13,10 @@ export default function Admin() {
   const actorRegions = user?.approverRegions ?? []
   // Regions this admin may assign. A '*' wildcard means all regions.
   const allowedRegions = actorRegions.includes('*') ? REGIONS : actorRegions
+  // Approvers can be assigned any region; admins stay scoped to the acting admin's regions.
+  const regionChoices = (r) => (r === 'approver' ? REGIONS : allowedRegions)
+
+  const [search, setSearch] = useState('')
 
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
@@ -63,6 +67,13 @@ export default function Admin() {
     catch (e) { setError(e.message) }
   }
 
+  const filteredUsers = users.filter((u) => {
+    const q = search.trim().toLowerCase()
+    if (!q) return true
+    const name = (u.displayName || u.email.split('@')[0]).toLowerCase()
+    return name.includes(q) || u.email.toLowerCase().includes(q)
+  })
+
   const cell = { padding: '8px 10px', borderBottom: `1px solid ${HAIRLINE}`, fontSize: '0.85rem', color: INK, verticalAlign: 'top' }
   const chip = (on) => ({
     display: 'inline-block', padding: '2px 7px', margin: '1px 3px 1px 0', borderRadius: 4,
@@ -97,7 +108,7 @@ export default function Admin() {
         {role !== 'requester' && (
           <div style={{ marginTop: 10 }}>
             <span style={{ fontSize: '0.75rem', color: MUTED, marginRight: 6 }}>Regions:</span>
-            {allowedRegions.map((r) => (
+            {regionChoices(role).map((r) => (
               <span key={r} style={chip(newRegions.includes(r))} onClick={() => toggle(newRegions, setNewRegions, r)}>{r}</span>
             ))}
           </div>
@@ -108,6 +119,13 @@ export default function Admin() {
       </div>
 
       {error && <p style={{ color: '#c2410c', fontSize: '0.8rem', margin: '0 0 12px' }}>{error}</p>}
+
+      {/* Search */}
+      {!loading && (
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users by name…"
+          style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', marginBottom: 10,
+            border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: '0.85rem' }} />
+      )}
 
       {/* User table */}
       {loading ? (
@@ -122,7 +140,7 @@ export default function Admin() {
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => {
+            {filteredUsers.map((u) => {
               const isEditing = editing === u.email
               return (
                 <tr key={u.email} style={{ opacity: u.active ? 1 : 0.5 }}>
@@ -140,7 +158,7 @@ export default function Admin() {
                     )}
                   </td>
                   <td style={cell}>
-                    {isEditing && editRole !== 'requester' ? allowedRegions.map((r) => (
+                    {isEditing && editRole !== 'requester' ? regionChoices(editRole).map((r) => (
                         <span key={r} style={chip(editRegions.includes(r))} onClick={() => toggle(editRegions, setEditRegions, r)}>{r}</span>
                       ))
                       : u.role === 'requester' ? <span style={{ color: MUTED }}>—</span>
