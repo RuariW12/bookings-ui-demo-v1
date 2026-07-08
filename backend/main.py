@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from database import get_pool, close_pool
 from schema import init_schema
-from routers import users, bookings, companies, blocks
+from routers import users, bookings, companies, blocks, employees
 
 
 @asynccontextmanager
@@ -18,6 +18,7 @@ app.include_router(users.router)
 app.include_router(bookings.router)
 app.include_router(companies.router)
 app.include_router(blocks.router)
+app.include_router(employees.router)
 
 
 @app.get("/api/health")
