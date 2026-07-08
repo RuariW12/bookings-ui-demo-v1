@@ -1,6 +1,7 @@
+import json
 from fastapi import APIRouter, HTTPException
 from database import get_pool
-from models import BookingCreate, BookingUpdate, BookingOut
+from models import BookingCreate, BookingUpdate, AssignUpdate, BookingOut
 from snow import create_case
 
 router = APIRouter(prefix="/api/bookings", tags=["bookings"])
@@ -20,6 +21,17 @@ CASE_DEFAULTS = {
     "u_severity": "Sev 3",          # only "Sev 4" confirmed live
     "priority": "4",
 }
+
+
+def _row(r) -> dict:
+    """asyncpg returns JSONB as a string — parse `assignees` back to a list."""
+    d = dict(r)
+    a = d.get("assignees")
+    if isinstance(a, str):
+        d["assignees"] = json.loads(a) if a else []
+    elif a is None:
+        d["assignees"] = []
+    return d
 
 
 def _build_case_payload(booking: dict, approver_email: str) -> dict:
@@ -54,7 +66,7 @@ async def list_bookings(region: str | None = None, status: str | None = None):
         query += f" AND status = ${len(args)}"
     query += " ORDER BY created_at DESC"
     rows = await pool.fetch(query, *args)
-    return [dict(r) for r in rows]
+    return [_row(r) for r in rows]
 
 
 @router.post("", response_model=BookingOut, status_code=201)
@@ -87,7 +99,7 @@ async def create_booking(booking: BookingCreate):
         booking.host_region, booking.notes,
         booking.requester_email, booking.requester_name,
     )
-    return dict(row)
+    return _row(row)
 
 
 @router.patch("/{booking_id}", response_model=BookingOut)
@@ -120,7 +132,7 @@ async def update_booking(booking_id: int, update: BookingUpdate):
         f"UPDATE bookings SET {', '.join(sets)}, updated_at = now() WHERE id = ${len(args)} RETURNING *",
         *args,
     )
-    return dict(row)
+    return _row(row)
 
 
 @router.patch("/{booking_id}/approve", response_model=BookingOut)
@@ -155,7 +167,7 @@ async def approve_booking(booking_id: int, approver_email: str):
            WHERE id = $1 RETURNING *""",
         booking_id, approver_email, case_id,
     )
-    return dict(row)
+    return _row(row)
 
 
 @router.patch("/{booking_id}/reject", response_model=BookingOut)
@@ -181,7 +193,34 @@ async def reject_booking(booking_id: int, approver_email: str):
            WHERE id = $1 RETURNING *""",
         booking_id, approver_email,
     )
-    return dict(row)
+    return _row(row)
+
+
+@router.patch("/{booking_id}/assign", response_model=BookingOut)
+async def assign_booking(booking_id: int, assignment: AssignUpdate, approver_email: str):
+    pool = await get_pool()
+    existing = await pool.fetchrow("SELECT * FROM bookings WHERE id = $1", booking_id)
+    if not existing:
+        raise HTTPException(404, "Booking not found")
+    # Assignment happens after approval — you approve, then staff the case.
+    if existing["status"] != "approved":
+        raise HTTPException(400, "Only approved bookings can be assigned")
+
+    approver = await pool.fetchrow(
+        "SELECT * FROM users WHERE email = $1 AND active = true", approver_email
+    )
+    if not approver or approver["role"] not in ("approver", "admin"):
+        raise HTTPException(403, "Not authorized to assign")
+    if approver["role"] == "approver" and existing["region"] not in list(approver["regions"] or []):
+        raise HTTPException(403, "Not authorized to assign bookings in this region")
+
+    payload = [a.model_dump() for a in assignment.assignees]
+    row = await pool.fetchrow(
+        """UPDATE bookings SET assignees = $2, updated_at = now()
+           WHERE id = $1 RETURNING *""",
+        booking_id, json.dumps(payload),
+    )
+    return _row(row)
 
 
 @router.delete("/{booking_id}", status_code=204)
