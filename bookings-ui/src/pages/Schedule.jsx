@@ -648,12 +648,18 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
   const [busy, setBusy]         = useState(false)
 
   // Time options = union of slot sets for the chosen regions (all regions if none picked yet).
+  // Time options = every 30-minute increment across the full day (12:00 AM → 11:30 PM).
   const slotOptions = useMemo(() => {
-    const src = regions.length ? regions : REGIONS
-    const set = new Set()
-    src.forEach((r) => (REGION_SLOTS[r] || []).forEach((t) => set.add(t)))
-    return [...set]
-  }, [regions])
+    const out = []
+    for (let mins = 0; mins < 24 * 60; mins += 30) {
+      const h24 = Math.floor(mins / 60)
+      const m = mins % 60
+      const ampm = h24 >= 12 ? 'PM' : 'AM'
+      const h12 = ((h24 + 11) % 12) + 1
+      out.push(`${h12}:${String(m).padStart(2, '0')} ${ampm}`)
+    }
+    return out
+  }, [])
 
   const toggleRegion = (r) =>
     setRegions((rs) => (rs.includes(r) ? rs.filter((x) => x !== r) : [...rs, r]))
