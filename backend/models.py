@@ -1,15 +1,21 @@
 from pydantic import BaseModel
 from datetime import datetime
+
+
 class UserCreate(BaseModel):
     email: str
     display_name: str
     role: str  # requester | approver | admin
     regions: list[str] = []
+
+
 class UserUpdate(BaseModel):
     display_name: str | None = None
     role: str | None = None
     regions: list[str] | None = None
     active: bool | None = None
+
+
 class UserOut(BaseModel):
     id: int
     email: str
@@ -20,6 +26,14 @@ class UserOut(BaseModel):
     seeded: bool
     created_at: datetime
     updated_at: datetime
+
+
+class Assignee(BaseModel):
+    name: str
+    email: str
+    region: str | None = None
+
+
 class BookingCreate(BaseModel):
     operation_type: str  # environment_build | md_refresh | cutover
     region: str  # CLD-HQ | CLD-CTC | CLD-EMEA
@@ -33,6 +47,8 @@ class BookingCreate(BaseModel):
     notes: str | None = None
     requester_email: str | None = None
     requester_name: str | None = None
+
+
 class BookingUpdate(BaseModel):
     # General edit for the schedule view. Approval is NOT handled here — it stays
     # on the region-guarded approve endpoint. Status here covers cancel/restore.
@@ -46,6 +62,13 @@ class BookingUpdate(BaseModel):
     host_region: str | None = None
     notes: str | None = None
     status: str | None = None  # pending | cancelled
+
+
+class AssignUpdate(BaseModel):
+    # Full-replace assignment list. Empty list clears assignees.
+    assignees: list[Assignee] = []
+
+
 class BookingOut(BaseModel):
     id: int
     operation_type: str | None = None
@@ -64,10 +87,15 @@ class BookingOut(BaseModel):
     approved_by: str | None
     approved_at: datetime | None
     servicenow_case_id: str | None
+    assignees: list[Assignee] = []
     created_at: datetime
     updated_at: datetime
+
+
 class CompanySearch(BaseModel):
     query: str
+
+
 class CaseCreate(BaseModel):
     short_description: str
     description: str | None = None
@@ -77,18 +105,3 @@ class CaseCreate(BaseModel):
     u_product_version: str
     u_severity: str         # e.g. "Sev 3"
     priority: str           # e.g. "3"
-class BlockCreate(BaseModel):
-    block_date: str
-    block_time: str | None = None   # None = whole day
-    regions: list[str] = []
-    reason: str | None = None
-
-
-class BlockOut(BaseModel):
-    id: int
-    block_date: str
-    block_time: str | None
-    regions: list[str]
-    reason: str | None
-    created_by: str | None
-    created_at: datetime
