@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     approved_by TEXT,
     approved_at TIMESTAMPTZ,
     servicenow_case_id TEXT,
+    assignees JSONB NOT NULL DEFAULT '[]',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -42,7 +43,13 @@ CREATE TABLE IF NOT EXISTS schedule_blocks (
 );
 """
 
+# Idempotent ALTERs for databases created before a column existed.
+MIGRATIONS = """
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS assignees JSONB NOT NULL DEFAULT '[]';
+"""
+
 
 async def init_schema(pool):
     async with pool.acquire() as conn:
         await conn.execute(SCHEMA)
+        await conn.execute(MIGRATIONS)
