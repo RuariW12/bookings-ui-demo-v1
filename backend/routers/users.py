@@ -51,7 +51,9 @@ async def create_user(user: UserCreate, actor_email: str):
         raise HTTPException(400, "This role must have at least one region")
 
     target_regions = [] if user.role == "requester" else user.regions
-    _within_actor_regions(actor, target_regions)
+    # Region scope bounds admin authority only; approvers may be assigned any region.
+    if user.role == "admin":
+        _within_actor_regions(actor, target_regions)
 
     try:
         row = await pool.fetchrow(
@@ -86,8 +88,12 @@ async def update_user(user_id: int, update: UserUpdate, actor_email: str):
     elif not new_regions:
         raise HTTPException(400, "This role must have at least one region")
 
-    _within_actor_regions(actor, list(existing["regions"] or []))
-    _within_actor_regions(actor, new_regions)
+    # Guard admin authority only: protect existing admins from out-of-scope edits,
+    # bound new admin grants. Approver regions are unrestricted.
+    if existing["role"] == "admin":
+        _within_actor_regions(actor, list(existing["regions"] or []))
+    if new_role == "admin":
+        _within_actor_regions(actor, new_regions)
 
     losing_admin = existing["role"] == "admin" and (new_role != "admin" or not new_active)
     if losing_admin:
