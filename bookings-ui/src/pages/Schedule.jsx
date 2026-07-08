@@ -1,12 +1,25 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import './Schedule.css'
 import { REGIONS, REGION_BUILD_CAPACITY, REGION_SLOTS } from '../lib/bookings.js'
+import { useAuth } from '../lib/auth'
+import { listBlocks, addBlock, removeBlock } from '../lib/blocks'
 
 const NUM_DAYS = 14
 const LANE_H = 58
 const LANE_GAP = 6
 const PAD = 8
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+// Status visual language. Inline so it overrides any Schedule.css rule.
+const STATUS_BORDER = {
+  pending:   '2px dashed #d97706',
+  approved:  '2px solid #16a34a',
+  rejected:  '2px solid #dc2626',
+  cancelled: '2px dashed #9ca3af',
+}
+const STATUS_COLOR = {
+  pending: '#d97706', approved: '#16a34a', rejected: '#dc2626', cancelled: '#9ca3af',
+}
 
 // --- date helpers ----------------------------------------------------------
 function parseISO(s) {
@@ -273,11 +286,17 @@ function SearchBox({ bookings, onSelect }) {
 // Schedule – main page component
 // ===========================================================================
 export default function Schedule() {
+  const { user } = useAuth()
+  const actorEmail = user?.email || ''
+  const isAdmin = user?.role === 'admin'   // FLAG: confirm auth user exposes `role`
+
   const [bookings, setBookings]     = useState([])
+  const [blocks, setBlocks]         = useState([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState('')
   const [viewStart, setViewStart]   = useState(() => sundayOf(new Date()))
   const [selectedId, setSelectedId] = useState(null)
+  const [showBlocks, setShowBlocks] = useState(false)
 
   const selected = bookings.find((b) => b.id === selectedId) || null
 
@@ -296,7 +315,12 @@ export default function Schedule() {
     }
   }
 
-  useEffect(() => { refresh() }, [])
+  async function refreshBlocks() {
+    try { setBlocks(await listBlocks()) }
+    catch (e) { setError(e.message) }
+  }
+
+  useEffect(() => { refresh(); refreshBlocks() }, [])
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") setSelectedId(null) }
@@ -310,6 +334,22 @@ export default function Schedule() {
     const newStart = sundayOf(addDays(bookingDate, -3))
     setViewStart(newStart)
     setSelectedId(booking.id)
+  }
+
+  // ── block mutations ──────────────────────────────────────────────────────
+  async function createBlock(payload) {
+    await addBlock(payload, actorEmail)   // throws on failure; modal shows it
+    await refreshBlocks()
+  }
+  async function removeBlk(id) {
+    await removeBlock(id, actorEmail)
+    await refreshBlocks()
+  }
+
+  // Blocks affecting a given region + day.
+  function cellBlocks(region, iso) {
+    if (!region) return []
+    return blocks.filter((bl) => bl.blockDate === iso && bl.regions.includes(region))
   }
 
   // ── derived data ────────────────────────────────────────────────────────
@@ -368,6 +408,12 @@ export default function Schedule() {
 
         <SearchBox bookings={bookings} onSelect={handleSearchSelect} />
 
+        {isAdmin && (
+          <button className="sched-btn" onClick={() => setShowBlocks(true)}>
+            Block dates
+          </button>
+        )}
+
         <div className="spacer" />
         <span className="sched-range">{fmtRange(viewStart)}</span>
         <button
@@ -393,7 +439,17 @@ export default function Schedule() {
         <span><i className="lg-build" />Build</span>
         <span><i className="lg-refresh" />MD Refresh</span>
         <span><i className="lg-cutover" />Cutover</span>
-        <span style={{ marginLeft: "auto" }}>Dashed = pending</span>
+        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 14, alignItems: "center", fontSize: "0.75rem" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 16, height: 11, border: "1.5px dashed #d97706", borderRadius: 2 }} />Pending
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 16, height: 11, border: "1.5px solid #16a34a", borderRadius: 2 }} />Approved
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{ width: 16, height: 11, borderRadius: 2, background: "repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 3px,#f3f4f6 3px,#f3f4f6 6px)" }} />Blocked
+          </span>
+        </span>
       </div>
 
       {error && (
@@ -473,16 +529,32 @@ export default function Schedule() {
 
                 <div className="sched-track" style={{ minHeight: trackH }}>
                   <div className="sched-track-bg">
-                    {days.map((d, i) => (
-                      <div
-                        key={i}
-                        className={
-                          "sched-bgcell" +
-                          (isWeekend(d) ? " weekend" : "") +
-                          (sameDay(d, today) ? " today" : "")
-                        }
-                      />
-                    ))}
+                    {days.map((d, i) => {
+                      const iso = fmtISO(d)
+                      const cb = cellBlocks(region, iso)
+                      const wholeDay = cb.some((bl) => !bl.blockTime)
+                      const slotOnly = !wholeDay && cb.length > 0
+                      const blockedStyle = wholeDay
+                        ? { background: "repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 4px,#f3f4f6 4px,#f3f4f6 8px)" }
+                        : slotOnly
+                          ? { background: "repeating-linear-gradient(45deg,#eef2ff,#eef2ff 4px,#ffffff 4px,#ffffff 8px)" }
+                          : undefined
+                      const title = cb.length
+                        ? cb.map((bl) => `${bl.blockTime || "All day"}${bl.reason ? " — " + bl.reason : ""}`).join("\n")
+                        : undefined
+                      return (
+                        <div
+                          key={i}
+                          title={title}
+                          className={
+                            "sched-bgcell" +
+                            (isWeekend(d) ? " weekend" : "") +
+                            (sameDay(d, today) ? " today" : "")
+                          }
+                          style={blockedStyle}
+                        />
+                      )
+                    })}
                   </div>
 
                   {laid.map((b) => {
@@ -503,9 +575,18 @@ export default function Schedule() {
                           width: `calc(${width}% - 4px)`,
                           top,
                           height: LANE_H,
+                          border: STATUS_BORDER[b.status] || '2px solid #cbd5e1',
+                          boxSizing: 'border-box',
                         }}
                         onClick={() => setSelectedId(b.id)}
                       >
+                        <span
+                          style={{
+                            position: 'absolute', top: 6, right: 6, width: 8, height: 8,
+                            borderRadius: '50%', background: STATUS_COLOR[b.status] || '#9ca3af',
+                            boxShadow: '0 0 0 2px rgba(255,255,255,0.65)',
+                          }}
+                        />
                         <span className="b-title">{b.title || b.operationLabel}</span>
                         <span className="b-sub">
                           {[b.cid, b.environment].filter(Boolean).join(" · ")}
@@ -539,6 +620,151 @@ export default function Schedule() {
           onClose={() => setSelectedId(null)}
         />
       )}
+
+      {showBlocks && isAdmin && (
+        <BlockModal
+          blocks={blocks}
+          onCreate={createBlock}
+          onRemove={removeBlk}
+          onClose={() => setShowBlocks(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ===========================================================================
+// BlockModal – admin blocks a date/slot across one or more regions
+// ===========================================================================
+function BlockModal({ blocks, onCreate, onRemove, onClose }) {
+  const B_INK = '#242424', B_MUTED = '#605e5c', B_BORDER = '#d7d5d2', B_ACCENT = '#e35205'
+
+  const [date, setDate]         = useState('')
+  const [regions, setRegions]   = useState([])
+  const [wholeDay, setWholeDay] = useState(true)
+  const [time, setTime]         = useState('')
+  const [reason, setReason]     = useState('')
+  const [err, setErr]           = useState('')
+  const [busy, setBusy]         = useState(false)
+
+  // Time options = union of slot sets for the chosen regions (all regions if none picked yet).
+  const slotOptions = useMemo(() => {
+    const src = regions.length ? regions : REGIONS
+    const set = new Set()
+    src.forEach((r) => (REGION_SLOTS[r] || []).forEach((t) => set.add(t)))
+    return [...set]
+  }, [regions])
+
+  const toggleRegion = (r) =>
+    setRegions((rs) => (rs.includes(r) ? rs.filter((x) => x !== r) : [...rs, r]))
+
+  async function submit() {
+    setErr('')
+    if (!date) return setErr('Pick a date')
+    if (!regions.length) return setErr('Pick at least one region')
+    if (!wholeDay && !time) return setErr('Pick a time or choose whole day')
+    setBusy(true)
+    try {
+      await onCreate({ blockDate: date, blockTime: wholeDay ? null : time, regions, reason })
+      setDate(''); setRegions([]); setWholeDay(true); setTime(''); setReason('')
+    } catch (e) { setErr(e.message) }
+    finally { setBusy(false) }
+  }
+
+  async function handleRemove(id) {
+    setErr('')
+    try { await onRemove(id) } catch (e) { setErr(e.message) }
+  }
+
+  const sorted = [...blocks].sort(
+    (a, b) => a.blockDate.localeCompare(b.blockDate) || (a.blockTime || '').localeCompare(b.blockTime || ''),
+  )
+
+  const chip = (on) => ({
+    display: 'inline-block', padding: '3px 9px', margin: '2px 4px 2px 0', borderRadius: 4,
+    fontSize: '0.75rem', cursor: 'pointer', border: `1px solid ${on ? B_ACCENT : B_BORDER}`,
+    background: on ? B_ACCENT : '#fff', color: on ? '#fff' : B_MUTED,
+  })
+  const box = { padding: '7px 9px', border: `1px solid ${B_BORDER}`, borderRadius: 5, fontSize: '0.85rem' }
+
+  return (
+    <div className="sched-overlay" onClick={onClose}>
+      <div className="sched-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+        <div className="sched-modal-head">
+          <div><h3>Blocked dates</h3></div>
+          <button className="sched-x" aria-label="Close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="sched-modal-body">
+          {/* create */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={box} />
+            <label style={{ fontSize: '0.8rem', color: B_INK, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <input type="checkbox" checked={wholeDay} onChange={(e) => setWholeDay(e.target.checked)} />
+              Whole day
+            </label>
+            {!wholeDay && (
+              <select value={time} onChange={(e) => setTime(e.target.value)} style={box}>
+                <option value="">Select time…</option>
+                {slotOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            <span style={{ fontSize: '0.75rem', color: B_MUTED, marginRight: 6 }}>Regions:</span>
+            {REGIONS.map((r) => (
+              <span key={r} style={chip(regions.includes(r))} onClick={() => toggleRegion(r)}>{r}</span>
+            ))}
+          </div>
+
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Reason (optional)"
+            style={{ ...box, width: '100%', boxSizing: 'border-box', marginTop: 10 }}
+          />
+
+          {err && <p style={{ color: '#c2410c', fontSize: '0.8rem', margin: '10px 0 0' }}>{err}</p>}
+
+          <button
+            onClick={submit}
+            disabled={busy}
+            style={{ marginTop: 12, padding: '7px 12px', borderRadius: 5, border: 'none',
+              background: B_ACCENT, color: '#fff', fontWeight: 600, fontSize: '0.82rem',
+              cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1 }}
+          >
+            {busy ? 'Adding…' : 'Add block'}
+          </button>
+
+          {/* existing */}
+          <div style={{ marginTop: 18, borderTop: `1px solid ${B_BORDER}`, paddingTop: 14 }}>
+            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: B_INK, marginBottom: 8 }}>
+              Current blocks
+            </div>
+            {sorted.length === 0 ? (
+              <p style={{ fontSize: '0.8rem', color: B_MUTED, margin: 0 }}>No blocks set.</p>
+            ) : (
+              sorted.map((bl) => (
+                <div key={bl.id} style={{ display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '6px 0', borderBottom: `1px solid #f0efed`, fontSize: '0.82rem', color: B_INK }}>
+                  <span style={{ fontWeight: 600 }}>{fmtDate(bl.blockDate)}</span>
+                  <span style={{ color: B_MUTED }}>{bl.blockTime || 'All day'}</span>
+                  <span style={{ color: B_MUTED }}>· {bl.regions.join(', ')}</span>
+                  {bl.reason && <span style={{ color: B_MUTED }}>· {bl.reason}</span>}
+                  <button
+                    onClick={() => handleRemove(bl.id)}
+                    style={{ marginLeft: 'auto', border: `1px solid ${B_BORDER}`, background: '#fff',
+                      borderRadius: 4, cursor: 'pointer', fontSize: '0.75rem', padding: '2px 8px', color: B_INK }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
