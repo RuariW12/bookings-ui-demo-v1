@@ -60,6 +60,19 @@ async def list_bookings(region: str | None = None, status: str | None = None):
 @router.post("", response_model=BookingOut, status_code=201)
 async def create_booking(booking: BookingCreate):
     pool = await get_pool()
+
+    # Reject bookings that land on a blocked date/slot for this region.
+    # A whole-day block has block_time IS NULL; a slot block matches the exact time.
+    blocked = await pool.fetchval(
+        """SELECT count(*) FROM schedule_blocks
+           WHERE block_date = $1
+             AND $2 = ANY(regions)
+             AND (block_time IS NULL OR block_time = $3)""",
+        booking.scheduled_date, booking.region, booking.scheduled_time,
+    )
+    if blocked:
+        raise HTTPException(409, "This date/time is blocked for the selected region")
+
     row = await pool.fetchrow(
         """INSERT INTO bookings
                (operation_type, region, scheduled_date, scheduled_time,
@@ -169,6 +182,7 @@ async def reject_booking(booking_id: int, approver_email: str):
         booking_id, approver_email,
     )
     return dict(row)
+
 
 @router.delete("/{booking_id}", status_code=204)
 async def delete_booking(booking_id: int):
