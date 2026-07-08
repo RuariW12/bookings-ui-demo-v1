@@ -4,6 +4,7 @@ import { REGIONS, REGION_BUILD_CAPACITY } from '../lib/bookings'
 import { getCompany, activeEnvironments, listCompanies } from '../lib/servicenow'
 import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
 import { notifyApproversForBooking } from '../lib/notifications'
+import { listBlocks } from '../lib/blocks'
 
 const OPERATION_TYPES = {
   build: {
@@ -221,6 +222,9 @@ function App() {
   // existing bookings — the real capacity/slot picture, loaded from the backend.
   const [bookings, setBookings] = useState([])
 
+  // admin-set schedule blocks (per region, whole-day or single slot).
+  const [blocks, setBlocks] = useState([])
+
   // details
   const [bookerName, setBookerName] = useState("")
   const [csmEmail, setCsmEmail] = useState("")
@@ -238,6 +242,9 @@ function App() {
       .catch(() => {})
   useEffect(() => { loadBookings() }, [])
 
+  // Load schedule blocks so the calendar can gray out blocked days/slots.
+  useEffect(() => { listBlocks().then(setBlocks).catch(() => {}) }, [])
+
   // Normalize backend rows (snake_case) to the shape the calendar logic needs.
   // Cancelled / rejected bookings don't occupy capacity.
   const existing = useMemo(
@@ -253,6 +260,23 @@ function App() {
         .filter((b) => b.status !== "cancelled" && b.status !== "rejected"),
     [bookings]
   )
+
+  // Whole-day block on a region for a given day?
+  const wholeDayBlocked = (region, day) => {
+    if (!region) return false
+    const iso = fmtISO(day)
+    return blocks.some((bl) => bl.blockDate === iso && !bl.blockTime && bl.regions.includes(region))
+  }
+
+  // Slot-level blocked times for a region + day.
+  const blockedSlots = (region, day) => {
+    const iso = fmtISO(day)
+    return new Set(
+      blocks
+        .filter((bl) => bl.blockDate === iso && bl.blockTime && bl.regions.includes(region))
+        .map((bl) => bl.blockTime)
+    )
+  }
 
   // How many builds occupy a given region on a given calendar day. A build
   // occupies its whole 5-business-day span, not just its start date.
@@ -285,7 +309,8 @@ function App() {
   // Slots come from the region's operating hours, narrowed by the op duration.
   const regionSlots = region && cfg?.pickTime ? slotsFor(region, operationType, hours) : []
   const takenSet = region && date && cfg?.pickTime ? takenSlots(region, date) : new Set()
-  const freeSlots = regionSlots.filter((s) => !takenSet.has(s))
+  const blockedSet = region && date && cfg?.pickTime ? blockedSlots(region, date) : new Set()
+  const freeSlots = regionSlots.filter((s) => !takenSet.has(s) && !blockedSet.has(s))
 
   const selectedEnv = company && environmentSysId
     ? company.environments.find((e) => e.sys_id === environmentSysId)
@@ -390,15 +415,21 @@ function App() {
         const cap = REGION_BUILD_CAPACITY[region] ?? Infinity
         const span = businessDaysFrom(day, cfg.spanBusinessDays)
         if (span.some((d) => buildCountOnDay(region, d) >= cap)) return false
+        // A whole-day block anywhere in the span rules the start out.
+        if (span.some((d) => wholeDayBlocked(region, d))) return false
       }
       return true
     }
     // timed ops (refresh / cutover): respect lead time
     if (day < addDays(startOfToday(), leadDaysFor(operationType, day))) return false
     if (region) {
+      // A whole-day block rules the day out entirely.
+      if (wholeDayBlocked(region, day)) return false
       const slots = slotsFor(region, operationType, hours)
       const taken = takenSlots(region, day)
-      if (slots.length > 0 && slots.every((s) => taken.has(s))) return false
+      const blocked = blockedSlots(region, day)
+      // Day is unusable if every slot is either taken or blocked.
+      if (slots.length > 0 && slots.every((s) => taken.has(s) || blocked.has(s))) return false
     }
     return true
   }
@@ -463,7 +494,9 @@ function App() {
         alert("Booking saved!")
         loadBookings()   // refresh capacity so the calendar reflects this booking
       } else {
-        alert("Server responded with status " + res.status)
+        let detail = "status " + res.status
+        try { detail = (await res.json()).detail || detail } catch {}
+        alert("Booking failed — " + detail)
       }
     } catch (err) {
       alert("Booking submitted (notification logged). Backend unreachable — see console.")
@@ -645,13 +678,21 @@ function App() {
                     businessDaysFrom(thisDay, cfg.spanBusinessDays).some(
                       (d) => buildCountOnDay(region, d) >= (REGION_BUILD_CAPACITY[region] ?? Infinity)
                     )
+                  // Explain a disabled day caused by an admin block.
+                  const dayBlocked =
+                    region && !selectable && (
+                      operationType === "build"
+                        ? businessDaysFrom(thisDay, cfg.spanBusinessDays).some((d) => wholeDayBlocked(region, d))
+                        : wholeDayBlocked(region, thisDay)
+                    )
                   return (
                     <button
                       key={dayNum}
                       type="button"
                       disabled={!selectable}
                       title={
-                        buildFull ? `${region} at build capacity for this window`
+                        dayBlocked ? `Blocked for ${region}`
+                        : buildFull ? `${region} at build capacity for this window`
                         : span ? "Reserved build day"
                         : undefined
                       }
@@ -688,16 +729,22 @@ function App() {
                   </div>
                   {regionSlots.map((t) => {
                     const taken = takenSet.has(t)
+                    const blocked = blockedSet.has(t)
+                    const disabled = taken || blocked
                     return (
                       <button
                         key={t}
                         type="button"
-                        disabled={taken}
-                        title={taken ? "Already booked for this region / day" : undefined}
-                        className={"slot" + (time === t ? " selected" : "") + (taken ? " taken" : "")}
+                        disabled={disabled}
+                        title={
+                          blocked ? "Blocked by an admin"
+                          : taken ? "Already booked for this region / day"
+                          : undefined
+                        }
+                        className={"slot" + (time === t ? " selected" : "") + (disabled ? " taken" : "")}
                         onClick={() => setTime(t)}
                       >
-                        {t}{taken ? " · booked" : ""}
+                        {t}{blocked ? " · blocked" : taken ? " · booked" : ""}
                       </button>
                     )
                   })}
