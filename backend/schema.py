@@ -10,7 +10,6 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
 CREATE TABLE IF NOT EXISTS bookings (
     id SERIAL PRIMARY KEY,
     operation_type TEXT NOT NULL,
@@ -31,6 +30,15 @@ CREATE TABLE IF NOT EXISTS bookings (
     servicenow_case_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS schedule_blocks (
+    id SERIAL PRIMARY KEY,
+    block_date TEXT NOT NULL,
+    block_time TEXT,                       -- NULL = whole day
+    regions TEXT[] NOT NULL DEFAULT '{}',
+    reason TEXT,
+    created_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """
 
