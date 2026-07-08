@@ -105,3 +105,20 @@ class CaseCreate(BaseModel):
     u_product_version: str
     u_severity: str         # e.g. "Sev 3"
     priority: str           # e.g. "3"
+
+
+class BlockCreate(BaseModel):
+    block_date: str
+    block_time: str | None = None   # None = whole day
+    regions: list[str] = []
+    reason: str | None = None
+
+
+class BlockOut(BaseModel):
+    id: int
+    block_date: str
+    block_time: str | None
+    regions: list[str]
+    reason: str | None
+    created_by: str | None
+    created_at: datetime
