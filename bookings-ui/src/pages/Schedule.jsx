@@ -12,13 +12,13 @@ const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 // Status visual language. Inline so it overrides any Schedule.css rule.
 const STATUS_BORDER = {
-  pending:   '2px dashed #d97706',
+  pending:   '3px dashed #e0a458',   // thicker = longer dashes, wider gaps
   approved:  '2px solid #16a34a',
   rejected:  '2px solid #dc2626',
-  cancelled: '2px dashed #9ca3af',
+  cancelled: '2px dashed #b6b3ae',
 }
 const STATUS_COLOR = {
-  pending: '#d97706', approved: '#16a34a', rejected: '#dc2626', cancelled: '#9ca3af',
+  pending: '#e0a458', approved: '#16a34a', rejected: '#dc2626', cancelled: '#9ca3af',
 }
 
 // --- date helpers ----------------------------------------------------------
@@ -122,6 +122,7 @@ function toUI(b) {
     operationType: b.operation_type,
     operationLabel: meta.label,
     title: b.company_name || meta.label,
+    companyName: b.company_name || '',
     cid: b.company_id || '',
     environment: b.environment_name || '',
     region: b.region,
@@ -288,7 +289,7 @@ function SearchBox({ bookings, onSelect }) {
 export default function Schedule() {
   const { user } = useAuth()
   const actorEmail = user?.email || ''
-  const isAdmin = user?.role === 'admin'   // FLAG: confirm auth user exposes `role`
+  const isAdmin = user?.role === 'admin'
 
   const [bookings, setBookings]     = useState([])
   const [blocks, setBlocks]         = useState([])
@@ -441,7 +442,7 @@ export default function Schedule() {
         <span><i className="lg-cutover" />Cutover</span>
         <span style={{ marginLeft: "auto", display: "inline-flex", gap: 14, alignItems: "center", fontSize: "0.75rem" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 16, height: 11, border: "1.5px dashed #d97706", borderRadius: 2 }} />Pending
+            <span style={{ width: 16, height: 11, border: "1.5px dashed #e0a458", borderRadius: 2 }} />Pending
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 16, height: 11, border: "1.5px solid #16a34a", borderRadius: 2 }} />Approved
@@ -647,7 +648,6 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
   const [err, setErr]           = useState('')
   const [busy, setBusy]         = useState(false)
 
-  // Time options = union of slot sets for the chosen regions (all regions if none picked yet).
   // Time options = every 30-minute increment across the full day (12:00 AM → 11:30 PM).
   const slotOptions = useMemo(() => {
     const out = []
@@ -881,10 +881,16 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
           </div>
 
           <div className="alloc-field">
-            <label>Project</label>
+            <label>Company / CID</label>
             <div className="alloc-box ro">
-              {[b.cid, b.environment].filter(Boolean).join(" / ") || "—"}
+              {b.companyName || "— no company —"}
+              {b.cid && <span style={{ color: "#605e5c" }}> · {b.cid}</span>}
             </div>
+          </div>
+
+          <div className="alloc-field">
+            <label>Project</label>
+            <div className="alloc-box ro">{b.environment || "—"}</div>
           </div>
 
           <div className="alloc-field">
