@@ -8,17 +8,15 @@ const NUM_DAYS = 14
 const LANE_H = 58
 const LANE_GAP = 6
 const PAD = 8
+const COLLAPSED_H = 26
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 // Status visual language. Inline so it overrides any Schedule.css rule.
 const STATUS_BORDER = {
-  pending:   '3px dashed #e0a458',   // thicker = longer dashes, wider gaps
+  pending:   '3px dashed #e0a458',
   approved:  '2px solid #16a34a',
   rejected:  '2px solid #dc2626',
   cancelled: '2px dashed #b6b3ae',
-}
-const STATUS_COLOR = {
-  pending: '#e0a458', approved: '#16a34a', rejected: '#dc2626', cancelled: '#9ca3af',
 }
 
 // --- date helpers ----------------------------------------------------------
@@ -121,7 +119,6 @@ function toUI(b) {
     id: b.id,
     operationType: b.operation_type,
     operationLabel: meta.label,
-    title: b.company_name || meta.label,
     companyName: b.company_name || '',
     cid: b.company_id || '',
     environment: b.environment_name || '',
@@ -134,7 +131,6 @@ function toUI(b) {
     status: b.status,
     privateNotes: b.notes || '',
     bookerName: b.requester_name || '',
-    status: b.status,
     serviceNowCaseId: b.servicenow_case_id || '',
   }
 }
@@ -273,7 +269,7 @@ function SearchBox({ bookings, onSelect }) {
               {/* CID is the primary label since that is what we searched on */}
               <span className="sb-item-title">{b.cid}</span>
               <span className="sb-item-meta">
-                {[b.title, b.region ?? 'No region', fmtDate(b.start)].filter(Boolean).join(' · ')}
+                {[b.companyName, b.region ?? 'No region', fmtDate(b.start)].filter(Boolean).join(' · ')}
               </span>
             </li>
           ))}
@@ -298,8 +294,18 @@ export default function Schedule() {
   const [viewStart, setViewStart]   = useState(() => sundayOf(new Date()))
   const [selectedId, setSelectedId] = useState(null)
   const [showBlocks, setShowBlocks] = useState(false)
+  // Regions whose bookings are hidden. Purely a local view preference.
+  const [collapsed, setCollapsed]   = useState(() => new Set())
 
   const selected = bookings.find((b) => b.id === selectedId) || null
+
+  const toggleRegionCollapse = (key) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
 
   // ── data fetching ──────────────────────────────────────────────────────
   async function refresh() {
@@ -335,6 +341,14 @@ export default function Schedule() {
     const newStart = sundayOf(addDays(bookingDate, -3))
     setViewStart(newStart)
     setSelectedId(booking.id)
+    // Jumping to a booking in a hidden region should reveal it.
+    const key = booking.region ?? '__none'
+    setCollapsed((prev) => {
+      if (!prev.has(key)) return prev
+      const next = new Set(prev)
+      next.delete(key)
+      return next
+    })
   }
 
   // ── block mutations ──────────────────────────────────────────────────────
@@ -451,10 +465,7 @@ export default function Schedule() {
             <span style={{ width: 16, height: 11, borderRadius: 2, background: "repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 3px,#f3f4f6 3px,#f3f4f6 6px)" }} />Blocked
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span style={{
-              width: 14, height: 14, borderRadius: "50%", background: "#16a34a",
-              flex: "0 0 auto",
-            }} />
+            <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#16a34a", flex: "0 0 auto" }} />
             SNOW case
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -494,12 +505,15 @@ export default function Schedule() {
           {/* ── region rows ── */}
           {rows.map((regionKey) => {
             const region = regionKey === "__none" ? null : regionKey
+            const isCollapsed = collapsed.has(regionKey)
             const items  = bookings.filter((b) => b.region === region)
             const laid   = assignLanes(
               [...items].sort((a, b) => parseISO(a.start) - parseISO(b.start)),
             )
             const laneCount = Math.max(1, ...laid.map((it) => it.lane + 1))
-            const trackH    = laneCount * (LANE_H + LANE_GAP) - LANE_GAP + PAD * 2
+            const trackH    = isCollapsed
+              ? COLLAPSED_H
+              : laneCount * (LANE_H + LANE_GAP) - LANE_GAP + PAD * 2
 
             const weekHours = items
               .filter((b) => b.status !== "cancelled")
@@ -527,12 +541,31 @@ export default function Schedule() {
             return (
               <div className="sched-row-wrap" key={regionKey} style={{ display: "contents" }}>
                 <div className="sched-rowlabel">
+                  <button
+                    onClick={() => toggleRegionCollapse(regionKey)}
+                    title={isCollapsed ? "Show bookings" : "Hide bookings"}
+                    aria-label={isCollapsed ? `Show ${region || "unassigned"} bookings` : `Hide ${region || "unassigned"} bookings`}
+                    aria-expanded={!isCollapsed}
+                    style={{
+                      flex: "0 0 auto", width: 20, height: 20, marginRight: 6,
+                      border: "1px solid #d7d5d2", background: "#fff", borderRadius: 4,
+                      cursor: "pointer", color: "#605e5c", fontSize: "0.6rem",
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      lineHeight: 1, padding: 0,
+                    }}
+                  >
+                    {isCollapsed ? "▶" : "▼"}
+                  </button>
                   <div>
                     <div className="rl-name">{region || "Unassigned"}</div>
-                    <div className="rl-sub">{region ? "Cloud Operations" : "Region TBD"}</div>
+                    <div className="rl-sub">
+                      {isCollapsed
+                        ? `${items.length} hidden`
+                        : region ? "Cloud Operations" : "Region TBD"}
+                    </div>
                   </div>
                   <div className="rl-cap">
-                    {limit != null && (
+                    {limit != null && !isCollapsed && (
                       <div
                         className={"rl-builds " + capState}
                         title="Peak concurrent builds in view / capacity"
@@ -540,7 +573,7 @@ export default function Schedule() {
                         {peakBuilds}/{limit} builds
                       </div>
                     )}
-                    <div className="rl-hours">{weekHours}h</div>
+                    {!isCollapsed && <div className="rl-hours">{weekHours}h</div>}
                   </div>
                 </div>
 
@@ -574,7 +607,7 @@ export default function Schedule() {
                     })}
                   </div>
 
-                  {laid.map((b) => {
+                  {!isCollapsed && laid.map((b) => {
                     const startIdx = dayDiff(parseISO(b.start), viewStart)
                     const endIdx   = dayDiff(parseISO(b.end),   viewStart)
                     if (endIdx < 0 || startIdx > NUM_DAYS - 1) return null
@@ -623,10 +656,10 @@ export default function Schedule() {
                             ? { paddingRight: 20, boxSizing: 'border-box' }
                             : undefined}
                         >
-                          {b.title || b.operationLabel}
+                          {b.operationLabel}
                         </span>
                         <span className="b-sub">
-                          {[b.cid, b.environment].filter(Boolean).join(" · ")}
+                          {[b.companyName, b.environment].filter(Boolean).join(" · ") || "—"}
                         </span>
                         <span className="b-foot">
                           {b.startTime ? `${b.startTime} · ` : ""}{b.durationHours}h
@@ -815,7 +848,7 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
   const isBuild  = b.operationType === "build"
   const pickTime = b.operationType !== "build"
 
-  const [title,     setTitle]     = useState(b.title || b.operationLabel || "")
+  const [companyName, setCompanyName] = useState(b.companyName || "")
   const [start,     setStart]     = useState(b.start)
   const [end,       setEnd]       = useState(b.end)
   const [startTime, setStartTime] = useState(b.startTime || "")
@@ -841,7 +874,7 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
 
   function save() {
     onSave({
-      company_name:   title,
+      company_name:   companyName || null,
       scheduled_date: start,
       region:         region || null,
       notes:          notes || null,
@@ -914,25 +947,21 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
           </div>
 
           <div className="alloc-field">
-            <label>Company / CID</label>
-            <div className="alloc-box ro">
-              {b.companyName || "— no company —"}
-              {b.cid && <span style={{ color: "#605e5c" }}> · {b.cid}</span>}
-            </div>
-          </div>
-
-          <div className="alloc-field">
-            <label>Project</label>
-            <div className="alloc-box ro">{b.environment || "—"}</div>
-          </div>
-
-          <div className="alloc-field">
-            <label>Task</label>
+            <label>Company name</label>
             <input
               className="alloc-box"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              placeholder="— no company —"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
             />
+          </div>
+
+          <div className="alloc-field">
+            <label>Environment</label>
+            <div className="alloc-box ro">
+              {b.environment || "—"}
+              {b.cid && <span style={{ color: "#605e5c" }}> · {b.cid}</span>}
+            </div>
           </div>
 
           <div className="alloc-field">
