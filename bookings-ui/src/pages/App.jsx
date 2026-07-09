@@ -211,6 +211,7 @@ function App() {
   const [companyQuery, setCompanyQuery] = useState("")
   const [company, setCompany] = useState(null)       // resolved SNOW company record
   const [manualEntry, setManualEntry] = useState(false)
+  const [manualCompanyName, setManualCompanyName] = useState("")
   const [allCompanies, setAllCompanies] = useState([])  // combobox source — every company
   const [companyOpen, setCompanyOpen] = useState(false) // combobox dropdown visibility
 
@@ -445,7 +446,7 @@ function App() {
       tier: operationType === "refresh" ? tier : null,
       durationHours: hours,
       region,
-      companyName: company?.name ?? null,
+      companyName: company?.name ?? (manualCompanyName || null),
       entitlement, cid, environment, environmentId,
       buildWindowStart: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[0]) : null,
       buildWindowEnd: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[buildSpan.length - 1]) : null,
@@ -632,6 +633,10 @@ function App() {
                 ← Use ServiceNow values
               </button>
             )}
+            <div className="field">
+              <label>Company name</label>
+              <input type="text" value={manualCompanyName} onChange={(e) => setManualCompanyName(e.target.value)} />
+            </div>
             <div className="field">
               <label>CID</label>
               <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} />
