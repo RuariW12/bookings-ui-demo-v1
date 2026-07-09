@@ -211,7 +211,6 @@ function App() {
   const [companyQuery, setCompanyQuery] = useState("")
   const [company, setCompany] = useState(null)       // resolved SNOW company record
   const [manualEntry, setManualEntry] = useState(false)
-  const [manualCompanyName, setManualCompanyName] = useState("")
   const [allCompanies, setAllCompanies] = useState([])  // combobox source — every company
   const [companyOpen, setCompanyOpen] = useState(false) // combobox dropdown visibility
 
@@ -446,7 +445,7 @@ function App() {
       tier: operationType === "refresh" ? tier : null,
       durationHours: hours,
       region,
-      companyName: company?.name ?? (manualCompanyName || null),
+      companyName: company?.name ?? (companyQuery.trim() || null),
       entitlement, cid, environment, environmentId,
       buildWindowStart: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[0]) : null,
       buildWindowEnd: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[buildSpan.length - 1]) : null,
@@ -592,11 +591,20 @@ function App() {
               )}
             </div>
           )}
-          {company && (
+          {company ? (
             <div className="tz" style={{ marginTop: 4 }}>
               {activeEnvironments(company).length} active environment(s) found in ServiceNow
             </div>
-          )}
+          ) : companyQuery.trim() ? (
+            <div
+              className="warning-box"
+              style={{ background: "#fff7ed", borderColor: "#fdba74", marginTop: 6 }}
+            >
+              <strong>No ServiceNow match.</strong> This will be booked as{" "}
+              <strong>{companyQuery.trim()}</strong> with details entered below. No ServiceNow case
+              will be created on approval — an approver will need to create one manually.
+            </div>
+          ) : null}
         </div>
 
         {company && !manualEntry ? (
@@ -633,10 +641,6 @@ function App() {
                 ← Use ServiceNow values
               </button>
             )}
-            <div className="field">
-              <label>Company name</label>
-              <input type="text" value={manualCompanyName} onChange={(e) => setManualCompanyName(e.target.value)} />
-            </div>
             <div className="field">
               <label>CID</label>
               <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} />
