@@ -126,6 +126,14 @@
 .rl-builds.full { color: #8a5a00; background: #fff4ce; }  /* at capacity */
 .rl-builds.over { color: #a4262c; background: #fde7e9; }  /* over capacity */
 
+/* Collapsed region row: shrink the label so the grid row can shrink with it. */
+.sched-rowlabel.collapsed {
+  padding: 4px 14px;
+  align-items: center;
+}
+.sched-rowlabel.collapsed .rl-name { font-size: 13px; }
+
+
 /* track (spans the 14 day columns) */
 .sched-track {
   grid-column: 2 / span 14;
@@ -403,3 +411,25 @@ textarea.alloc-box { min-height: 64px; resize: vertical; }
   font-size: 0.72rem;
   color: #6b7280;
 }
+
+
+/* region visibility toggle */
+.rl-toggle {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  padding: 0;
+  margin-right: 6px;
+  cursor: pointer;
+  color: #8a8886;
+  font-size: 9px;
+  line-height: 1;
+}
+.rl-toggle:hover { color: #e35205; }
+
+/* collapsed region row: shrink the label so the grid row shrinks with it */
+.sched-rowlabel.collapsed {
+  padding: 4px 14px;
+  align-items: center;
+}
+.sched-rowlabel.collapsed .rl-name { font-size: 13px; }

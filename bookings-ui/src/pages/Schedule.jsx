@@ -8,15 +8,20 @@ const NUM_DAYS = 14
 const LANE_H = 58
 const LANE_GAP = 6
 const PAD = 8
-const COLLAPSED_H = 26
+const COLLAPSED_H = 32
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-// Status visual language. Inline so it overrides any Schedule.css rule.
+// Status border. Inline so it overrides Schedule.css's .status-pending rule.
 const STATUS_BORDER = {
   pending:   '3px dashed #e0a458',
   approved:  '2px solid #16a34a',
   rejected:  '2px solid #dc2626',
   cancelled: '2px dashed #b6b3ae',
+}
+
+const BLOCK_FILL = {
+  wholeDay: "repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 4px,#f3f4f6 4px,#f3f4f6 8px)",
+  slot:     "repeating-linear-gradient(45deg,#eef2ff,#eef2ff 4px,#ffffff 4px,#ffffff 8px)",
 }
 
 // --- date helpers ----------------------------------------------------------
@@ -111,10 +116,6 @@ function toUI(b) {
     hours: 0,
   }
   const start = b.scheduled_date
-  const end =
-    b.operation_type === 'build'
-      ? nthBusinessDay(start, meta.spanBusinessDays)
-      : start
   return {
     id: b.id,
     operationType: b.operation_type,
@@ -124,9 +125,8 @@ function toUI(b) {
     environment: b.environment_name || '',
     region: b.region,
     start,
-    end,
+    end: b.operation_type === 'build' ? nthBusinessDay(start, meta.spanBusinessDays) : start,
     startTime: b.scheduled_time || '',
-    endTime: '',
     durationHours: meta.hours,
     status: b.status,
     privateNotes: b.notes || '',
@@ -165,7 +165,7 @@ function peakConcurrentBuilds(builds, days) {
 }
 
 // ===========================================================================
-// SearchBox – inlined component
+// SearchBox
 // ===========================================================================
 function SearchBox({ bookings, onSelect }) {
   const [query, setQuery]   = useState('')
@@ -174,16 +174,12 @@ function SearchBox({ bookings, onSelect }) {
   const containerRef        = useRef(null)
   const inputRef            = useRef(null)
 
-  // Match on CID, return every matching booking with no de-duplication or cap
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    return bookings.filter((b) =>
-      (b.cid || '').toLowerCase().includes(q)
-    )
+    return bookings.filter((b) => (b.cid || '').toLowerCase().includes(q))
   }, [query, bookings])
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     function handlePointerDown(e) {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -195,10 +191,7 @@ function SearchBox({ bookings, onSelect }) {
     return () => document.removeEventListener('pointerdown', handlePointerDown)
   }, [])
 
-  // Reset cursor when suggestion list length changes
-  useEffect(() => {
-    setCursor(-1)
-  }, [suggestions.length])
+  useEffect(() => { setCursor(-1) }, [suggestions.length])
 
   const commit = useCallback(
     (booking) => {
@@ -266,7 +259,6 @@ function SearchBox({ bookings, onSelect }) {
                 commit(b)
               }}
             >
-              {/* CID is the primary label since that is what we searched on */}
               <span className="sb-item-title">{b.cid}</span>
               <span className="sb-item-meta">
                 {[b.companyName, b.region ?? 'No region', fmtDate(b.start)].filter(Boolean).join(' · ')}
@@ -294,7 +286,7 @@ export default function Schedule() {
   const [viewStart, setViewStart]   = useState(() => sundayOf(new Date()))
   const [selectedId, setSelectedId] = useState(null)
   const [showBlocks, setShowBlocks] = useState(false)
-  // Regions whose bookings are hidden. Purely a local view preference.
+  // Regions whose bookings are hidden. Local view preference only.
   const [collapsed, setCollapsed]   = useState(() => new Set())
 
   const selected = bookings.find((b) => b.id === selectedId) || null
@@ -337,9 +329,7 @@ export default function Schedule() {
 
   // ── search → jump ──────────────────────────────────────────────────────
   function handleSearchSelect(booking) {
-    const bookingDate = parseISO(booking.start)
-    const newStart = sundayOf(addDays(bookingDate, -3))
-    setViewStart(newStart)
+    setViewStart(sundayOf(addDays(parseISO(booking.start), -3)))
     setSelectedId(booking.id)
     // Jumping to a booking in a hidden region should reveal it.
     const key = booking.region ?? '__none'
@@ -351,7 +341,7 @@ export default function Schedule() {
     })
   }
 
-  // ── block mutations ──────────────────────────────────────────────────────
+  // ── block mutations ────────────────────────────────────────────────────
   async function createBlock(payload) {
     await addBlock(payload, actorEmail)   // throws on failure; modal shows it
     await refreshBlocks()
@@ -361,13 +351,12 @@ export default function Schedule() {
     await refreshBlocks()
   }
 
-  // Blocks affecting a given region + day.
   function cellBlocks(region, iso) {
     if (!region) return []
     return blocks.filter((bl) => bl.blockDate === iso && bl.regions.includes(region))
   }
 
-  // ── derived data ────────────────────────────────────────────────────────
+  // ── derived data ───────────────────────────────────────────────────────
   const days = useMemo(
     () => Array.from({ length: NUM_DAYS }, (_, i) => addDays(viewStart, i)),
     [viewStart],
@@ -379,7 +368,7 @@ export default function Schedule() {
     return [...REGIONS, ...(hasNull ? ["__none"] : [])]
   }, [bookings])
 
-  // ── mutations ───────────────────────────────────────────────────────────
+  // ── mutations ──────────────────────────────────────────────────────────
   const patchBooking = async (id, patch) => {
     setError('')
     try {
@@ -415,7 +404,7 @@ export default function Schedule() {
     }
   }
 
-  // ── render ──────────────────────────────────────────────────────────────
+  // ── render ─────────────────────────────────────────────────────────────
   return (
     <div className="sched">
       <div className="sched-toolbar">
@@ -454,27 +443,20 @@ export default function Schedule() {
         <span><i className="lg-build" />Build</span>
         <span><i className="lg-refresh" />MD Refresh</span>
         <span><i className="lg-cutover" />Cutover</span>
-        <span style={{ marginLeft: "auto", display: "inline-flex", flexWrap: "wrap", gap: 14, alignItems: "center", fontSize: "0.75rem" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 16, height: 11, border: "1.5px dashed #e0a458", borderRadius: 2 }} />Pending
-          </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 16, height: 11, border: "1.5px solid #16a34a", borderRadius: 2 }} />Approved
-          </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 16, height: 11, borderRadius: 2, background: "repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 3px,#f3f4f6 3px,#f3f4f6 6px)" }} />Blocked
-          </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span style={{ width: 14, height: 14, borderRadius: "50%", background: "#16a34a", flex: "0 0 auto" }} />
+        <span style={{ marginLeft: "auto", display: "inline-flex", flexWrap: "wrap", gap: 14, alignItems: "center" }}>
+          <span><i style={{ border: "1.5px dashed #e0a458", background: "none" }} />Pending</span>
+          <span><i style={{ border: "1.5px solid #16a34a", background: "none" }} />Approved</span>
+          <span><i style={{ background: BLOCK_FILL.wholeDay }} />Blocked</span>
+          <span>
+            <i style={{ background: "#16a34a", borderRadius: "50%", width: 13, height: 13 }} />
             SNOW case
           </span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span style={{
-              width: 14, height: 14, borderRadius: "50%", background: "#f59e0b",
-              color: "#fff", fontSize: "0.6rem", fontWeight: 700,
-              display: "inline-flex", alignItems: "center", justifyContent: "center",
-              lineHeight: 1, flex: "0 0 auto",
-            }}>!</span>
+          <span>
+            <i style={{
+              background: "#f59e0b", borderRadius: "50%", width: 13, height: 13,
+              color: "#fff", fontSize: 9, fontWeight: 700,
+              display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1,
+            }}>!</i>
             No SNOW case
           </span>
         </span>
@@ -506,12 +488,12 @@ export default function Schedule() {
           {rows.map((regionKey) => {
             const region = regionKey === "__none" ? null : regionKey
             const isCollapsed = collapsed.has(regionKey)
-            const items  = bookings.filter((b) => b.region === region)
-            const laid   = assignLanes(
+            const items = bookings.filter((b) => b.region === region)
+            const laid = assignLanes(
               [...items].sort((a, b) => parseISO(a.start) - parseISO(b.start)),
             )
             const laneCount = Math.max(1, ...laid.map((it) => it.lane + 1))
-            const trackH    = isCollapsed
+            const trackH = isCollapsed
               ? COLLAPSED_H
               : laneCount * (LANE_H + LANE_GAP) - LANE_GAP + PAD * 2
 
@@ -523,85 +505,73 @@ export default function Schedule() {
             const peakBuilds =
               limit != null
                 ? peakConcurrentBuilds(
-                    items.filter(
-                      (b) => b.operationType === "build" && b.status !== "cancelled",
-                    ),
+                    items.filter((b) => b.operationType === "build" && b.status !== "cancelled"),
                     days,
                   )
                 : 0
             const capState =
-              limit == null
-                ? ""
-                : peakBuilds > limit
-                  ? "over"
-                  : peakBuilds === limit
-                    ? "full"
-                    : ""
+              limit == null ? ""
+                : peakBuilds > limit ? "over"
+                : peakBuilds === limit ? "full"
+                : ""
 
             return (
               <div className="sched-row-wrap" key={regionKey} style={{ display: "contents" }}>
-                <div className="sched-rowlabel">
+                <div className={"sched-rowlabel" + (isCollapsed ? " collapsed" : "")}>
                   <button
+                    className="rl-toggle"
                     onClick={() => toggleRegionCollapse(regionKey)}
                     title={isCollapsed ? "Show bookings" : "Hide bookings"}
-                    aria-label={isCollapsed ? `Show ${region || "unassigned"} bookings` : `Hide ${region || "unassigned"} bookings`}
+                    aria-label={`${isCollapsed ? "Show" : "Hide"} ${region || "unassigned"} bookings`}
                     aria-expanded={!isCollapsed}
-                    style={{
-                      flex: "0 0 auto", width: 20, height: 20, marginRight: 6,
-                      border: "1px solid #d7d5d2", background: "#fff", borderRadius: 4,
-                      cursor: "pointer", color: "#605e5c", fontSize: "0.6rem",
-                      display: "inline-flex", alignItems: "center", justifyContent: "center",
-                      lineHeight: 1, padding: 0,
-                    }}
                   >
                     {isCollapsed ? "▶" : "▼"}
                   </button>
                   <div>
                     <div className="rl-name">{region || "Unassigned"}</div>
-                    <div className="rl-sub">
-                      {isCollapsed
-                        ? `${items.length} hidden`
-                        : region ? "Cloud Operations" : "Region TBD"}
-                    </div>
+                    {!isCollapsed && (
+                      <div className="rl-sub">{region ? "Cloud Operations" : "Region TBD"}</div>
+                    )}
                   </div>
                   <div className="rl-cap">
-                    {limit != null && !isCollapsed && (
-                      <div
-                        className={"rl-builds " + capState}
-                        title="Peak concurrent builds in view / capacity"
-                      >
-                        {peakBuilds}/{limit} builds
-                      </div>
+                    {isCollapsed ? (
+                      <div className="rl-hours">{items.length} hidden</div>
+                    ) : (
+                      <>
+                        {limit != null && (
+                          <div
+                            className={"rl-builds " + capState}
+                            title="Peak concurrent builds in view / capacity"
+                          >
+                            {peakBuilds}/{limit} builds
+                          </div>
+                        )}
+                        <div className="rl-hours">{weekHours}h</div>
+                      </>
                     )}
-                    {!isCollapsed && <div className="rl-hours">{weekHours}h</div>}
                   </div>
                 </div>
 
-                <div className="sched-track" style={{ minHeight: trackH }}>
+                <div className="sched-track" style={{ height: trackH }}>
                   <div className="sched-track-bg">
                     {days.map((d, i) => {
-                      const iso = fmtISO(d)
-                      const cb = cellBlocks(region, iso)
+                      const cb = cellBlocks(region, fmtISO(d))
                       const wholeDay = cb.some((bl) => !bl.blockTime)
-                      const slotOnly = !wholeDay && cb.length > 0
-                      const blockedStyle = wholeDay
-                        ? { background: "repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 4px,#f3f4f6 4px,#f3f4f6 8px)" }
-                        : slotOnly
-                          ? { background: "repeating-linear-gradient(45deg,#eef2ff,#eef2ff 4px,#ffffff 4px,#ffffff 8px)" }
-                          : undefined
-                      const title = cb.length
-                        ? cb.map((bl) => `${bl.blockTime || "All day"}${bl.reason ? " — " + bl.reason : ""}`).join("\n")
+                      const fill = wholeDay ? BLOCK_FILL.wholeDay
+                        : cb.length ? BLOCK_FILL.slot
                         : undefined
                       return (
                         <div
                           key={i}
-                          title={title}
+                          title={cb.length
+                            ? cb.map((bl) => `${bl.blockTime || "All day"}${bl.reason ? " — " + bl.reason : ""}`).join("\n")
+                            : undefined}
                           className={
                             "sched-bgcell" +
                             (isWeekend(d) ? " weekend" : "") +
                             (sameDay(d, today) ? " today" : "")
                           }
-                          style={blockedStyle}
+                          style={fill ? { background: fill } : undefined}
                         />
                       )
                     })}
@@ -615,7 +585,7 @@ export default function Schedule() {
                     const ce    = Math.min(endIdx, NUM_DAYS - 1)
                     const left  = (cs / NUM_DAYS) * 100
                     const width = ((ce - cs + 1) / NUM_DAYS) * 100
-                    const top   = PAD + b.lane * (LANE_H + LANE_GAP)
+                    const approved = b.status === 'approved'
                     return (
                       <button
                         key={b.id}
@@ -623,7 +593,7 @@ export default function Schedule() {
                         style={{
                           left: `${left}%`,
                           width: `calc(${width}% - 4px)`,
-                          top,
+                          top: PAD + b.lane * (LANE_H + LANE_GAP),
                           height: LANE_H,
                           border: STATUS_BORDER[b.status] || '2px solid #cbd5e1',
                           boxSizing: 'border-box',
@@ -631,7 +601,7 @@ export default function Schedule() {
                         onClick={() => setSelectedId(b.id)}
                       >
                         {/* SNOW case indicator — only meaningful once approved. */}
-                        {b.status === 'approved' && (
+                        {approved && (
                           <span
                             title={b.serviceNowCaseId
                               ? `ServiceNow case ${b.serviceNowCaseId}`
@@ -652,9 +622,7 @@ export default function Schedule() {
                         )}
                         <span
                           className="b-title"
-                          style={b.status === 'approved'
-                            ? { paddingRight: 20, boxSizing: 'border-box' }
-                            : undefined}
+                          style={approved ? { paddingRight: 20, boxSizing: 'border-box' } : undefined}
                         >
                           {b.operationLabel}
                         </span>
@@ -714,15 +682,13 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
   const [err, setErr]           = useState('')
   const [busy, setBusy]         = useState(false)
 
-  // Time options = every 30-minute increment across the full day (12:00 AM → 11:30 PM).
+  // Every 30-minute increment across the full day (12:00 AM → 11:30 PM).
   const slotOptions = useMemo(() => {
     const out = []
     for (let mins = 0; mins < 24 * 60; mins += 30) {
       const h24 = Math.floor(mins / 60)
       const m = mins % 60
-      const ampm = h24 >= 12 ? 'PM' : 'AM'
-      const h12 = ((h24 + 11) % 12) + 1
-      out.push(`${h12}:${String(m).padStart(2, '0')} ${ampm}`)
+      out.push(`${((h24 + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h24 >= 12 ? 'PM' : 'AM'}`)
     }
     return out
   }, [])
@@ -768,7 +734,6 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
         </div>
 
         <div className="sched-modal-body">
-          {/* create */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={box} />
             <label style={{ fontSize: '0.8rem', color: B_INK, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -809,7 +774,6 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
             {busy ? 'Adding…' : 'Add block'}
           </button>
 
-          {/* existing */}
           <div style={{ marginTop: 18, borderTop: `1px solid ${B_BORDER}`, paddingTop: 14 }}>
             <div style={{ fontSize: '0.78rem', fontWeight: 600, color: B_INK, marginBottom: 8 }}>
               Current blocks
@@ -819,7 +783,7 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
             ) : (
               sorted.map((bl) => (
                 <div key={bl.id} style={{ display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '6px 0', borderBottom: `1px solid #f0efed`, fontSize: '0.82rem', color: B_INK }}>
+                  padding: '6px 0', borderBottom: '1px solid #f0efed', fontSize: '0.82rem', color: B_INK }}>
                   <span style={{ fontWeight: 600 }}>{fmtDate(bl.blockDate)}</span>
                   <span style={{ color: B_MUTED }}>{bl.blockTime || 'All day'}</span>
                   <span style={{ color: B_MUTED }}>· {bl.regions.join(', ')}</span>
@@ -846,7 +810,7 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
 // ===========================================================================
 function DetailModal({ b, onSave, onDelete, onClose }) {
   const isBuild  = b.operationType === "build"
-  const pickTime = b.operationType !== "build"
+  const pickTime = !isBuild
 
   const [companyName, setCompanyName] = useState(b.companyName || "")
   const [start,     setStart]     = useState(b.start)
@@ -855,7 +819,7 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
   const [notes,     setNotes]     = useState(b.privateNotes || "")
   const [region,    setRegion]    = useState(b.region)
 
-  const endTime     = pickTime && startTime ? computeEndTime(startTime, b.durationHours) : b.endTime
+  const endTime     = pickTime && startTime ? computeEndTime(startTime, b.durationHours) : ""
   const workingDays = isBuild ? Math.max(1, countWeekdays(start, end)) : 1
   const hoursPerDay = Math.round((b.durationHours / workingDays) * 10) / 10
   const slots       = region ? (REGION_SLOTS[region] || []) : []
@@ -910,11 +874,7 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
                   Duration: {workingDays} working day{workingDays === 1 ? "" : "s"}
                 </span>
                 <div className="date-range">
-                  <input
-                    type="date"
-                    value={start}
-                    onChange={(e) => onStartChange(e.target.value)}
-                  />
+                  <input type="date" value={start} onChange={(e) => onStartChange(e.target.value)} />
                   {isBuild && (
                     <>
                       <span className="chev">›</span>
@@ -937,9 +897,7 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
                   {!slots.includes(startTime) && (
                     <option value="">{startTime || "—"}</option>
                   )}
-                  {slots.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
+                  {slots.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <span className="muted">– {endTime}</span>
               </div>
@@ -982,25 +940,18 @@ function DetailModal({ b, onSave, onDelete, onClose }) {
               onChange={(e) => setRegion(e.target.value || null)}
             >
               <option value="">Unassigned</option>
-              {REGIONS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
+              {REGIONS.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
 
-          {b.bookerName && (
-            <div className="alloc-meta">Booked by {b.bookerName}</div>
-          )}
+          {b.bookerName && <div className="alloc-meta">Booked by {b.bookerName}</div>}
         </div>
 
         <div className="alloc-buttons">
           <button className="btn-update" onClick={save}>Update</button>
           <button className="btn-light" onClick={onClose}>Close</button>
           <span className="spacer" />
-          <button
-            className="btn-link danger"
-            onClick={() => { onDelete(); onClose() }}
-          >
+          <button className="btn-link danger" onClick={() => { onDelete(); onClose() }}>
             Delete booking
           </button>
         </div>
