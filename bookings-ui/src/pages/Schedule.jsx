@@ -440,7 +440,7 @@ export default function Schedule() {
         <span><i className="lg-build" />Build</span>
         <span><i className="lg-refresh" />MD Refresh</span>
         <span><i className="lg-cutover" />Cutover</span>
-        <span style={{ marginLeft: "auto", display: "inline-flex", gap: 14, alignItems: "center", fontSize: "0.75rem" }}>
+        <span style={{ marginLeft: "auto", display: "inline-flex", flexWrap: "wrap", gap: 14, alignItems: "center", fontSize: "0.75rem" }}>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 16, height: 11, border: "1.5px dashed #e0a458", borderRadius: 2 }} />Pending
           </span>
@@ -451,17 +451,19 @@ export default function Schedule() {
             <span style={{ width: 16, height: 11, borderRadius: 2, background: "repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 3px,#f3f4f6 3px,#f3f4f6 6px)" }} />Blocked
           </span>
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span
-              style={{
-                width: 14, height: 14, borderRadius: "50%",
-                background: "#f59e0b", color: "#fff",
-                fontSize: "0.6rem", fontWeight: 700,
-                display: "inline-flex", alignItems: "center", justifyContent: "center",
-                lineHeight: 1, flex: "0 0 auto",
-              }}
-            >
-              !
-            </span>
+            <span style={{
+              width: 14, height: 14, borderRadius: "50%", background: "#16a34a",
+              flex: "0 0 auto",
+            }} />
+            SNOW case
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{
+              width: 14, height: 14, borderRadius: "50%", background: "#f59e0b",
+              color: "#fff", fontSize: "0.6rem", fontWeight: 700,
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              lineHeight: 1, flex: "0 0 auto",
+            }}>!</span>
             No SNOW case
           </span>
         </span>
@@ -595,41 +597,39 @@ export default function Schedule() {
                         }}
                         onClick={() => setSelectedId(b.id)}
                       >
+                        {/* SNOW case indicator — only meaningful once approved. */}
+                        {b.status === 'approved' && (
+                          <span
+                            title={b.serviceNowCaseId
+                              ? `ServiceNow case ${b.serviceNowCaseId}`
+                              : 'Approved without a ServiceNow case (manual-entry booking)'}
+                            aria-label={b.serviceNowCaseId ? 'ServiceNow case created' : 'No ServiceNow case'}
+                            style={{
+                              position: 'absolute', top: 6, right: 6,
+                              width: 14, height: 14, borderRadius: '50%',
+                              background: b.serviceNowCaseId ? '#16a34a' : '#f59e0b',
+                              color: '#fff', fontSize: '0.6rem', fontWeight: 700,
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              lineHeight: 1,
+                              boxShadow: '0 0 0 2px rgba(255,255,255,0.65)',
+                            }}
+                          >
+                            {b.serviceNowCaseId ? '' : '!'}
+                          </span>
+                        )}
                         <span
-                          style={{
-                            position: 'absolute', top: 6, right: 6, width: 8, height: 8,
-                            borderRadius: '50%', background: STATUS_COLOR[b.status] || '#9ca3af',
-                            boxShadow: '0 0 0 2px rgba(255,255,255,0.65)',
-                          }}
-                        />
-                        <span className="b-title">{b.title || b.operationLabel}</span>
+                          className="b-title"
+                          style={b.status === 'approved'
+                            ? { paddingRight: 20, boxSizing: 'border-box' }
+                            : undefined}
+                        >
+                          {b.title || b.operationLabel}
+                        </span>
                         <span className="b-sub">
                           {[b.cid, b.environment].filter(Boolean).join(" · ")}
                         </span>
-                        <span
-                          className="b-foot"
-                          style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, width: '100%' }}
-                        >
-                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {b.startTime ? `${b.startTime} · ` : ""}{b.durationHours}h
-                          </span>
-                          {b.status === 'approved' && !b.serviceNowCaseId && (
-                            <span
-                              className="no-case-badge"
-                              title="Approved without a ServiceNow case (manual-entry booking)"
-                              aria-label="No ServiceNow case"
-                              style={{
-                                flex: '0 0 auto', marginLeft: 'auto',
-                                width: 14, height: 14, borderRadius: '50%',
-                                background: '#f59e0b', color: '#fff',
-                                fontSize: '0.6rem', fontWeight: 700,
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                lineHeight: 1,
-                              }}
-                            >
-                              !
-                            </span>
-                          )}
+                        <span className="b-foot">
+                          {b.startTime ? `${b.startTime} · ` : ""}{b.durationHours}h
                         </span>
                       </button>
                     )
