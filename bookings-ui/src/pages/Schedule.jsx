@@ -450,6 +450,20 @@ export default function Schedule() {
           <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
             <span style={{ width: 16, height: 11, borderRadius: 2, background: "repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 3px,#f3f4f6 3px,#f3f4f6 6px)" }} />Blocked
           </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span
+              style={{
+                width: 14, height: 14, borderRadius: "50%",
+                background: "#f59e0b", color: "#fff",
+                fontSize: "0.6rem", fontWeight: 700,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                lineHeight: 1, flex: "0 0 auto",
+              }}
+            >
+              !
+            </span>
+            No SNOW case
+          </span>
         </span>
       </div>
 
@@ -592,10 +606,29 @@ export default function Schedule() {
                         <span className="b-sub">
                           {[b.cid, b.environment].filter(Boolean).join(" · ")}
                         </span>
-                        <span className="b-foot">
-                          {b.startTime ? `${b.startTime} · ` : ""}{b.durationHours}h
+                        <span
+                          className="b-foot"
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, width: '100%' }}
+                        >
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {b.startTime ? `${b.startTime} · ` : ""}{b.durationHours}h
+                          </span>
                           {b.status === 'approved' && !b.serviceNowCaseId && (
-                            <span className="no-case-badge" title="Approved without a ServiceNow case (manual-entry booking)">No SNOW case</span>
+                            <span
+                              className="no-case-badge"
+                              title="Approved without a ServiceNow case (manual-entry booking)"
+                              aria-label="No ServiceNow case"
+                              style={{
+                                flex: '0 0 auto', marginLeft: 'auto',
+                                width: 14, height: 14, borderRadius: '50%',
+                                background: '#f59e0b', color: '#fff',
+                                fontSize: '0.6rem', fontWeight: 700,
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                lineHeight: 1,
+                              }}
+                            >
+                              !
+                            </span>
                           )}
                         </span>
                       </button>
