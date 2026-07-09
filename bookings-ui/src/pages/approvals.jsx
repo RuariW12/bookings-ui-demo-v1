@@ -14,7 +14,15 @@ const STATUS_LABELS = {
   cancelled: 'Cancelled',
 }
 
-const FILTERS = ['all', 'pending', 'approved', 'rejected', 'cancelled']
+const STATUS_OPTIONS = ['all', 'pending', 'approved', 'rejected', 'cancelled']
+
+const ASSIGN_OPTIONS = {
+  all:        'Any assignment',
+  assigned:   'Assigned',
+  unassigned: 'Unassigned',
+}
+
+const DEFAULTS = { q: '', status: 'pending', region: 'all', assign: 'all' }
 
 // Assignment status → row accent. Approved+assigned green, approved+unassigned
 // orange (the flag), everything not-approved a neutral gray.
@@ -54,6 +62,15 @@ function toUI(b) {
     rejectedAt: b.status === 'rejected' ? (b.approved_at || '') : '',
     rejectionReason: '',
   }
+}
+
+// Fields the search box matches against. Company name, requester name,
+// requester email, environment name. Case-insensitive substring, single query
+// across all four (an OR) — the whole row matches if any field does.
+function matchesQuery(b, q) {
+  if (!q) return true
+  return [b.title, b.csm, b.csmEmail, b.environment]
+    .some(v => (v || '').toLowerCase().includes(q))
 }
 
 async function readError(res) {
@@ -97,7 +114,12 @@ export default function Approvals() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const [filter, setFilter] = useState('all')
+  // ── filter box state ──
+  const [q, setQ] = useState(DEFAULTS.q)
+  const [status, setStatus] = useState(DEFAULTS.status)
+  const [region, setRegion] = useState(DEFAULTS.region)
+  const [assign, setAssign] = useState(DEFAULTS.assign)
+
   const [expanded, setExpanded] = useState(null)     // booking id or null
   const [rejectingId, setRejectingId] = useState(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -125,8 +147,21 @@ export default function Approvals() {
     return c
   }, [bookings])
 
+  // Region dropdown options come from the data, not a hardcoded list.
+  const regionOptions = useMemo(
+    () => [...new Set(bookings.map(b => b.region).filter(Boolean))].sort(),
+    [bookings]
+  )
+
+  // All filters AND together. An empty search matches everything.
   const filtered = useMemo(() => {
-    const list = filter === 'all' ? bookings : bookings.filter(b => b.status === filter)
+    const needle = q.trim().toLowerCase()
+    const list = bookings.filter(b => {
+      if (status !== 'all' && b.status !== status) return false
+      if (region !== 'all' && b.region !== region) return false
+      if (assign !== 'all' && assignState(b) !== assign) return false
+      return matchesQuery(b, needle)
+    })
     // Pending first, then most-recently-submitted first
     return [...list].sort((a, b) => {
       const rank = { pending: 0, approved: 1, rejected: 1, cancelled: 2 }
@@ -134,7 +169,18 @@ export default function Approvals() {
       if (r !== 0) return r
       return (b.submittedAt || '').localeCompare(a.submittedAt || '')
     })
-  }, [bookings, filter])
+  }, [bookings, q, status, region, assign])
+
+  const isFiltered =
+    q !== DEFAULTS.q || status !== DEFAULTS.status ||
+    region !== DEFAULTS.region || assign !== DEFAULTS.assign
+
+  function clearFilters() {
+    setQ(DEFAULTS.q)
+    setStatus(DEFAULTS.status)
+    setRegion(DEFAULTS.region)
+    setAssign(DEFAULTS.assign)
+  }
 
   const assigningBooking = bookings.find(b => b.id === assigningId) || null
 
@@ -197,18 +243,42 @@ export default function Approvals() {
   return (
     <div className="approvals">
 
-      {/* Status filter tabs */}
-      <div className="approval-filters">
-        {FILTERS.map(f => (
-          <button
-            key={f}
-            className={'filter-tab' + (filter === f ? ' active' : '')}
-            onClick={() => setFilter(f)}
-          >
-            {f === 'all' ? 'All' : STATUS_LABELS[f]}
-            <span className="filter-count">{counts[f]}</span>
-          </button>
-        ))}
+      {/* Filter box */}
+      <div className="filter-box">
+        <input
+          className="filter-search"
+          type="search"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search company, requester, or environment…"
+        />
+
+        <select className="filter-select" value={status} onChange={e => setStatus(e.target.value)}>
+          {STATUS_OPTIONS.map(s => (
+            <option key={s} value={s}>
+              {(s === 'all' ? 'All statuses' : STATUS_LABELS[s])} ({counts[s]})
+            </option>
+          ))}
+        </select>
+
+        <select className="filter-select" value={region} onChange={e => setRegion(e.target.value)}>
+          <option value="all">All regions</option>
+          {regionOptions.map(r => <option key={r} value={r}>{r}</option>)}
+        </select>
+
+        <select className="filter-select" value={assign} onChange={e => setAssign(e.target.value)}>
+          {Object.entries(ASSIGN_OPTIONS).map(([v, label]) => (
+            <option key={v} value={v}>{label}</option>
+          ))}
+        </select>
+
+        <span className="filter-result-count">
+          {filtered.length} of {bookings.length}
+        </span>
+
+        {isFiltered && (
+          <button className="filter-clear" onClick={clearFilters}>Clear</button>
+        )}
       </div>
 
       {canReview && (
@@ -223,7 +293,9 @@ export default function Approvals() {
         <div className="approvals-empty">Loading…</div>
       ) : filtered.length === 0 ? (
         <div className="approvals-empty">
-          No {filter === 'all' ? '' : filter} bookings to show.
+          {bookings.length === 0
+            ? 'No bookings to show.'
+            : 'No bookings match the current filters.'}
         </div>
       ) : (
         <table className="approvals-table">

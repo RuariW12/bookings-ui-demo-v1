@@ -27,46 +27,71 @@
   background: #fff;
 }
 
-/* ── status filter tabs ─────────────────────────────────── */
-.approval-filters {
+/* ── filter box ─────────────────────────────────────────── */
+.filter-box {
   display: flex;
-  gap: 2px;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #eee;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #fafafa;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
 }
-.filter-tab {
-  border: none;
-  background: none;
+
+.filter-search {
   font: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  color: #888;
-  padding: 10px 18px;
+  font-size: 13.5px;
+  flex: 1 1 260px;
+  min-width: 200px;
+  padding: 7px 10px;
+  border: 1px solid #d7d5d2;
+  border-radius: 6px;
+  background: #fff;
+  color: #242424;
+}
+.filter-search::placeholder { color: #aaa; }
+.filter-search:focus {
+  outline: none;
+  border-color: #e35205;
+  box-shadow: 0 0 0 2px rgba(227, 82, 5, 0.12);
+}
+
+.filter-select {
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 9px;
+  border: 1px solid #d7d5d2;
+  border-radius: 6px;
+  background: #fff;
+  color: #242424;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  transition: color 0.15s;
 }
-.filter-tab:hover { color: #555; }
-.filter-tab.active {
+.filter-select:focus {
+  outline: none;
+  border-color: #e35205;
+}
+
+.filter-result-count {
+  font-size: 12px;
+  color: #888;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.filter-clear {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border: 1px solid #d7d5d2;
+  border-radius: 6px;
+  background: #fff;
   color: #e35205;
-  border-bottom-color: #e35205;
+  cursor: pointer;
 }
-.filter-count {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 700;
-  background: #eee;
-  color: #666;
-  border-radius: 10px;
-  padding: 1px 7px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-.filter-tab.active .filter-count {
-  background: #fde8dc;
-  color: #e35205;
-}
+.filter-clear:hover { background: #fde8dc; }
 
 /* ── table ──────────────────────────────────────────────── */
 .approvals-table {
