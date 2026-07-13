@@ -29,6 +29,5 @@ dist-ssr
 
 # Email list (to be changed to postgres)
 emails.txt
-userConfig.js
 diagramflow.txt
 src/docs/
