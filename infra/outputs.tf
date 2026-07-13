@@ -4,8 +4,8 @@ output "public_ip" {
 }
 
 output "app_url" {
-  description = "URL once DNS points at the IP and the cert is issued."
-  value       = "https://${var.domain_name}/"
+  description = "URL once the stack is up (test: plain HTTP on the EIP)."
+  value       = "http://${aws_eip.app.public_ip}/"
 }
 
 output "instance_id" {

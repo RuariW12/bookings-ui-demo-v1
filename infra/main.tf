@@ -1,7 +1,8 @@
-# Test-account infra: networking, IAM, DB secret in SSM, and the EC2 instance.
-# Scoped to what the test account can prove: EC2 boots, Docker builds, the stack
-# comes up over plain HTTP on the Elastic IP. No domain -> no Let's Encrypt/443.
-# No Entra/ServiceNow/Power Automate on this account -> those params are omitted.
+# Test-account infra, hardened for reproducible bootstrap.
+# Scoped to what the test account can prove: EC2 boots, Docker builds on ARM, the
+# stack comes up over plain HTTP on the Elastic IP. No domain -> no Let's Encrypt/443.
+# github_token + userconfig_js SSM params are prod-readiness scaffolding: inert
+# ("UNSET") on the test account, set out-of-band for prod.
 
 data "aws_caller_identity" "current" {}
 
@@ -109,7 +110,7 @@ resource "aws_iam_instance_profile" "instance" {
   role = aws_iam_role.instance.name
 }
 
-# ── SSM parameters (the one secret worth proving injection with) ──────────────
+# ── SSM parameters ───────────────────────────────────────────────────────────
 
 resource "random_password" "db" {
   length  = 24
@@ -120,6 +121,29 @@ resource "aws_ssm_parameter" "db_password" {
   name  = "/${var.app_name}/db_password"
   type  = "SecureString"
   value = random_password.db.result
+}
+
+# GitHub token for cloning a private repo. "UNSET" -> bootstrap does a plain
+# clone (fine for the public test repo). Set out-of-band for a private prod repo.
+resource "aws_ssm_parameter" "github_token" {
+  name  = "/${var.app_name}/github_token"
+  type  = "SecureString"
+  value = "UNSET"
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+# Full contents of bookings-ui/src/lib/userConfig.js (gitignored, real emails/
+# regions). "UNSET" -> bootstrap keeps whatever the repo ships (the committed
+# stub). Set out-of-band for prod so the real config never lives in the repo.
+resource "aws_ssm_parameter" "userconfig_js" {
+  name  = "/${var.app_name}/userconfig_js"
+  type  = "SecureString"
+  value = "UNSET"
+  lifecycle {
+    ignore_changes = [value]
+  }
 }
 
 # ── EC2 instance ─────────────────────────────────────────────────────────────
@@ -145,47 +169,101 @@ resource "aws_instance" "app" {
   vpc_security_group_ids = [aws_security_group.app.id]
   iam_instance_profile   = aws_iam_instance_profile.instance.name
 
-  # Boot must not run before the SSM read policy is attached or the param exists.
+  # Boot must not run before the SSM read policy is attached or the params exist.
   depends_on = [
     aws_iam_role_policy.read_params,
     aws_iam_role_policy_attachment.ssm_core,
     aws_ssm_parameter.db_password,
+    aws_ssm_parameter.github_token,
+    aws_ssm_parameter.userconfig_js,
   ]
 
   user_data = <<EOT
 #!/bin/bash
 set -euo pipefail
 
-dnf update -y
-dnf install -y docker git
+# Retry wrapper for network-fragile steps: a transient dnf/curl/git/SSM failure
+# retries instead of killing the whole bootstrap.
+retry() {
+  local n=0 max=5 delay=5
+  until "$@"; do
+    n=$((n+1))
+    if [ "$n" -ge "$max" ]; then
+      echo "BOOTSTRAP FAILED after $max attempts: $*" >&2
+      return 1
+    fi
+    echo "retry $n/$max: $* (sleep $delay)" >&2
+    sleep "$delay"
+  done
+}
+
+# uname -m gives aarch64/x86_64 (compose asset naming); Docker plugin releases
+# use arm64/amd64 (Go arch naming). Map between them.
+ARCH=$(uname -m)
+case "$ARCH" in
+  aarch64) DOCKER_ARCH=arm64 ;;
+  x86_64)  DOCKER_ARCH=amd64 ;;
+  *)       echo "unsupported arch: $ARCH" >&2; exit 1 ;;
+esac
+
+retry dnf update -y
+retry dnf install -y docker git
 
 # aws CLI: prefer preinstalled, fall back to package, then official bundle.
 if ! command -v aws >/dev/null 2>&1; then
   dnf install -y awscli-2 || dnf install -y awscli || {
-    dnf install -y unzip
-    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscli.zip
+    retry dnf install -y unzip
+    retry curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$ARCH.zip" -o /tmp/awscli.zip
     unzip -q /tmp/awscli.zip -d /tmp
     /tmp/aws/install
   }
 fi
 
-# Compose plugin (arch-aware: uname -m -> x86_64 / aarch64).
-mkdir -p /usr/local/lib/docker/cli-plugins
-curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
-chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+# Docker CLI plugins into a path that overrides the (older) package-bundled ones.
+PLUGIN_DIR=/usr/local/lib/docker/cli-plugins
+mkdir -p "$PLUGIN_DIR"
+
+# Compose (latest; asset uses uname -m naming).
+retry curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$ARCH" -o "$PLUGIN_DIR/docker-compose"
+chmod +x "$PLUGIN_DIR/docker-compose"
+
+# Buildx pinned: AL2023's package-bundled buildx is < 0.17.0, which "compose
+# build" rejects. Asset name embeds the version, so this can't use latest/.
+BUILDX_VERSION=v0.25.0
+retry curl -fsSL "https://github.com/docker/buildx/releases/download/$BUILDX_VERSION/buildx-$BUILDX_VERSION.linux-$DOCKER_ARCH" -o "$PLUGIN_DIR/docker-buildx"
+chmod +x "$PLUGIN_DIR/docker-buildx"
+
 systemctl enable --now docker
+
+get() {
+  retry aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text --region "${var.aws_region}"
+}
 
 APP_DIR=/opt/bookings
 mkdir -p "$APP_DIR"
-git clone --branch "${var.git_branch}" --depth 1 "${var.repo_url}" "$APP_DIR/src"
 
-get() {
-  aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text --region "${var.aws_region}"
-}
+# Token-gated clone: inject a token when one is set, else plain clone (public repo).
+TOKEN=$(get "/${var.app_name}/github_token")
+if [ "$TOKEN" != "UNSET" ] && [ -n "$TOKEN" ]; then
+  CLONE_URL=$(echo "${var.repo_url}" | sed "s#https://#https://x-access-token:$TOKEN@#")
+else
+  CLONE_URL="${var.repo_url}"
+fi
+retry git clone --branch "${var.git_branch}" --depth 1 "$CLONE_URL" "$APP_DIR/src"
+
+# Overwrite userConfig.js from SSM when provided; otherwise keep the repo's copy.
+USERCONFIG=$(get "/${var.app_name}/userconfig_js")
+if [ "$USERCONFIG" != "UNSET" ] && [ -n "$USERCONFIG" ]; then
+  DEST="$APP_DIR/src/bookings-ui/src/lib/userConfig.js"
+  mkdir -p "$(dirname "$DEST")"
+  printf '%s' "$USERCONFIG" > "$DEST"
+fi
 
 # http:// DOMAIN makes Caddy serve plain HTTP (no ACME), same as the local .env.
+# ACME_EMAIL kept as a harmless placeholder so compose doesn't warn.
 cat > "$APP_DIR/src/.env" <<ENV
 DOMAIN=http://${aws_eip.app.public_ip}
+ACME_EMAIL=${var.acme_email}
 POSTGRES_USER=bookings_admin
 POSTGRES_DB=${var.db_name}
 POSTGRES_PASSWORD=$(get "/${var.app_name}/db_password")
@@ -196,7 +274,7 @@ ENV
 chmod 600 "$APP_DIR/src/.env"
 
 cd "$APP_DIR/src"
-docker compose up -d --build
+retry docker compose up -d --build
 EOT
 
   user_data_replace_on_change = true
