@@ -11,7 +11,7 @@ const PAD = 8
 const COLLAPSED_H = 32
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-// Status border. Inline so it overrides Schedule.css's .status-pending rule.
+// Status border
 const STATUS_BORDER = {
   pending:   '3px dashed #e0a458',
   approved:  '2px solid #16a34a',
