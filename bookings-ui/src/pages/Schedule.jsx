@@ -446,6 +446,7 @@ export default function Schedule() {
         <span style={{ marginLeft: "auto", display: "inline-flex", flexWrap: "wrap", gap: 14, alignItems: "center" }}>
           <span><i style={{ border: "1.5px dashed #e0a458", background: "none" }} />Pending</span>
           <span><i style={{ border: "1.5px solid #16a34a", background: "none" }} />Approved</span>
+          <span><i style={{ border: "1.5px solid #dc2626", background: "none" }} />Rejected</span>
           <span><i style={{ background: BLOCK_FILL.wholeDay }} />Blocked</span>
           <span>
             <i style={{ background: "#16a34a", borderRadius: "50%", width: 13, height: 13 }} />
