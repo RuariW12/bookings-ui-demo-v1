@@ -1,29 +1,32 @@
-# Consolidated infra: networking, IAM, SSM parameters, and the EC2 instance.
+# Test-account infra: networking, IAM, DB secret in SSM, and the EC2 instance.
+# Scoped to what the test account can prove: EC2 boots, Docker builds, the stack
+# comes up over plain HTTP on the Elastic IP. No domain -> no Let's Encrypt/443.
+# No Entra/ServiceNow/Power Automate on this account -> those params are omitted.
 
 data "aws_caller_identity" "current" {}
+
+locals {
+  # Graviton (t4g/*g) instances need arm64; everything else x86_64.
+  cpu_arch = can(regex("^[a-z]+[0-9]+g\\.", var.instance_type)) ? "arm64" : "x86_64"
+}
 
 # ── Networking ───────────────────────────────────────────────────────────────
 
 resource "aws_security_group" "app" {
   name        = "${var.app_name}-web"
-  description = "Public web access for the bookings app"
+  description = "Public web access for the bookings app (test: HTTP only)"
   vpc_id      = var.vpc_id
 
   ingress {
-    description = "HTTPS"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    description = "HTTP (ACME challenge + redirect to HTTPS)"
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  # 443 intentionally omitted for the test account: no domain, no trusted cert.
+  # Add it at prod alongside the real domain + Let's Encrypt.
 
   dynamic "ingress" {
     for_each = var.ssh_ingress_cidr == "" ? [] : [var.ssh_ingress_cidr]
@@ -106,7 +109,7 @@ resource "aws_iam_instance_profile" "instance" {
   role = aws_iam_role.instance.name
 }
 
-# ── SSM parameters (runtime config + secrets) ────────────────────────────────
+# ── SSM parameters (the one secret worth proving injection with) ──────────────
 
 resource "random_password" "db" {
   length  = 24
@@ -119,44 +122,6 @@ resource "aws_ssm_parameter" "db_password" {
   value = random_password.db.result
 }
 
-resource "aws_ssm_parameter" "entra_client_id" {
-  name  = "/${var.app_name}/entra_client_id"
-  type  = "String"
-  value = var.entra_client_id == "" ? "UNSET" : var.entra_client_id
-}
-
-resource "aws_ssm_parameter" "entra_tenant_id" {
-  name  = "/${var.app_name}/entra_tenant_id"
-  type  = "String"
-  value = var.entra_tenant_id == "" ? "UNSET" : var.entra_tenant_id
-}
-
-resource "aws_ssm_parameter" "entra_redirect_uri" {
-  name  = "/${var.app_name}/entra_redirect_uri"
-  type  = "String"
-  value = var.entra_redirect_uri == "" ? "https://${var.domain_name}/" : var.entra_redirect_uri
-}
-
-resource "aws_ssm_parameter" "servicenow" {
-  name  = "/${var.app_name}/servicenow"
-  type  = "SecureString"
-  value = "SET_OUT_OF_BAND"
-
-  lifecycle {
-    ignore_changes = [value]
-  }
-}
-
-resource "aws_ssm_parameter" "power_automate" {
-  name  = "/${var.app_name}/power_automate"
-  type  = "SecureString"
-  value = "SET_OUT_OF_BAND"
-
-  lifecycle {
-    ignore_changes = [value]
-  }
-}
-
 # ── EC2 instance ─────────────────────────────────────────────────────────────
 
 data "aws_ami" "al2023" {
@@ -165,11 +130,11 @@ data "aws_ami" "al2023" {
 
   filter {
     name   = "name"
-    values = ["al2023-ami-2023.*-x86_64"]
+    values = ["al2023-ami-2023.*-${local.cpu_arch}"]
   }
   filter {
     name   = "architecture"
-    values = ["x86_64"]
+    values = [local.cpu_arch]
   }
 }
 
@@ -180,19 +145,33 @@ resource "aws_instance" "app" {
   vpc_security_group_ids = [aws_security_group.app.id]
   iam_instance_profile   = aws_iam_instance_profile.instance.name
 
-  # Bootstrap (formerly user_data.sh.tftpl, now inline). Comment out to boot a
-  # bare instance that doesn't self-configure.
-  # Bootstrap (formerly user_data.sh.tftpl, now inline). Comment out to boot a
-  # bare instance that doesn't self-configure.
+  # Boot must not run before the SSM read policy is attached or the param exists.
+  depends_on = [
+    aws_iam_role_policy.read_params,
+    aws_iam_role_policy_attachment.ssm_core,
+    aws_ssm_parameter.db_password,
+  ]
+
   user_data = <<EOT
 #!/bin/bash
 set -euo pipefail
 
 dnf update -y
-dnf install -y docker git awscli
+dnf install -y docker git
 
+# aws CLI: prefer preinstalled, fall back to package, then official bundle.
+if ! command -v aws >/dev/null 2>&1; then
+  dnf install -y awscli-2 || dnf install -y awscli || {
+    dnf install -y unzip
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscli.zip
+    unzip -q /tmp/awscli.zip -d /tmp
+    /tmp/aws/install
+  }
+fi
+
+# Compose plugin (arch-aware: uname -m -> x86_64 / aarch64).
 mkdir -p /usr/local/lib/docker/cli-plugins
-curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" -o /usr/local/lib/docker/cli-plugins/docker-compose
+curl -fsSL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 systemctl enable --now docker
 
@@ -204,17 +183,15 @@ get() {
   aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text --region "${var.aws_region}"
 }
 
+# http:// DOMAIN makes Caddy serve plain HTTP (no ACME), same as the local .env.
 cat > "$APP_DIR/src/.env" <<ENV
-DOMAIN=${var.domain_name}
-ACME_EMAIL=${var.acme_email}
+DOMAIN=http://${aws_eip.app.public_ip}
 POSTGRES_USER=bookings_admin
 POSTGRES_DB=${var.db_name}
 POSTGRES_PASSWORD=$(get "/${var.app_name}/db_password")
-VITE_ENTRA_CLIENT_ID=$(get "/${var.app_name}/entra_client_id")
-VITE_ENTRA_TENANT_ID=$(get "/${var.app_name}/entra_tenant_id")
-VITE_REDIRECT_URI=$(get "/${var.app_name}/entra_redirect_uri")
-SERVICENOW_CREDS=$(get "/${var.app_name}/servicenow")
-POWER_AUTOMATE=$(get "/${var.app_name}/power_automate")
+VITE_ENTRA_CLIENT_ID=UNSET
+VITE_ENTRA_TENANT_ID=UNSET
+VITE_REDIRECT_URI=http://${aws_eip.app.public_ip}/
 ENV
 chmod 600 "$APP_DIR/src/.env"
 
