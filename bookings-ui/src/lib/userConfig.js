@@ -1,7 +1,7 @@
 // Admins are seeded here and checked first. Region is informational
 // (which region they own) — admins are global in capability.
 const adminIdentities = {
-  'kremson@strategy.com': { regions: ['CLD-HQ'] },
+  'rwhalen@strategy.com': { regions: ['CLD-HQ'] },
 }
 
 
