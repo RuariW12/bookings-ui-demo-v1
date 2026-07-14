@@ -13,5 +13,6 @@ backend/.venv/
 __pycache__/
 *.pyc
 .env
+backend/seed_users.py
 
 .dev-pids
