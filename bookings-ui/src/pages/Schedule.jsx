@@ -3,6 +3,7 @@ import './Schedule.css'
 import { REGIONS, REGION_BUILD_CAPACITY, REGION_SLOTS } from '../lib/bookings.js'
 import { useAuth } from '../lib/auth'
 import { listBlocks, addBlock, removeBlock } from '../lib/blocks'
+import { listReservations, releaseGroup } from '../lib/reservations'
 
 const NUM_DAYS = 14
 const LANE_H = 58
@@ -132,6 +133,44 @@ function toUI(b) {
     privateNotes: b.notes || '',
     bookerName: b.requester_name || '',
     serviceNowCaseId: b.servicenow_case_id || '',
+  }
+}
+
+// Human countdown to a hold's expiry. Recomputed as `now` ticks.
+function fmtRemaining(iso, now) {
+  const ms = new Date(iso).getTime() - now
+  if (ms <= 0) return 'expired'
+  const mins = Math.floor(ms / 60000)
+  const d = Math.floor(mins / 1440)
+  const h = Math.floor((mins % 1440) / 60)
+  const m = mins % 60
+  if (d > 0) return `${d}d ${h}h`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
+// A live hold, shaped like a booking so it shares the lane layout.
+function resToUI(r) {
+  const meta = OP_META[r.operationType] || { label: r.operationType, spanBusinessDays: 1, hours: 0 }
+  return {
+    id: `res-${r.id}`,
+    reservationId: r.id,
+    groupId: r.groupId,
+    isReservation: true,
+    operationType: r.operationType,
+    operationLabel: meta.label,
+    companyName: r.companyName,
+    cid: r.cid,
+    region: r.region,
+    start: r.date,
+    end: r.operationType === 'build' ? nthBusinessDay(r.date, meta.spanBusinessDays) : r.date,
+    startTime: r.time,
+    durationHours: meta.hours,
+    status: 'reserved',
+    reason: r.reason,
+    requesterEmail: r.requesterEmail,
+    requesterName: r.requesterName,
+    expiresAt: r.expiresAt,
   }
 }
 
@@ -287,6 +326,9 @@ export default function Schedule() {
   const [selectedId, setSelectedId] = useState(null)
   const [showBlocks, setShowBlocks] = useState(false)
   const [viewingBlock, setViewingBlock] = useState(null)   // block detail modal
+  const [reservations, setReservations] = useState([])
+  const [viewingRes, setViewingRes] = useState(null)       // reservation detail modal
+  const [now, setNow] = useState(() => Date.now())         // drives the countdowns
   // Regions whose bookings are hidden. Local view preference only.
   const [collapsed, setCollapsed]   = useState(() => new Set())
 
@@ -320,7 +362,30 @@ export default function Schedule() {
     catch (e) { setError(e.message) }
   }
 
-  useEffect(() => { refresh(); refreshBlocks() }, [])
+  async function refreshReservations() {
+    try { setReservations(await listReservations()) }
+    catch (e) { setError(e.message) }
+  }
+
+  useEffect(() => { refresh(); refreshBlocks(); refreshReservations() }, [])
+
+  // Tick once a minute so countdowns stay honest without hammering the backend.
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000)
+    return () => clearInterval(t)
+  }, [])
+
+  async function releaseHold(groupId) {
+    setError('')
+    try { await releaseGroup(groupId, actorEmail); setViewingRes(null); await refreshReservations() }
+    catch (e) { setError(e.message) }
+  }
+
+  // Belt and braces: drop anything that expired since the last fetch.
+  const liveReservations = useMemo(
+    () => reservations.filter((r) => new Date(r.expiresAt).getTime() > now),
+    [reservations, now]
+  )
 
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") setSelectedId(null) }
@@ -452,6 +517,7 @@ export default function Schedule() {
           <span><i style={{ border: "1.5px solid #16a34a", background: "none" }} />Approved</span>
           <span><i style={{ border: "1.5px solid #dc2626", background: "none" }} />Rejected</span>
           <span><i style={{ background: BLOCK_FILL.wholeDay }} />Blocked</span>
+          <span><i style={{ background: '#f5f3ff', border: '1px dashed #8b5cf6' }} />Reserved</span>
           <span>
             <i style={{ background: "#16a34a", borderRadius: "50%", width: 13, height: 13 }} />
             SNOW case
@@ -494,8 +560,9 @@ export default function Schedule() {
             const region = regionKey === "__none" ? null : regionKey
             const isCollapsed = collapsed.has(regionKey)
             const items = bookings.filter((b) => b.region === region)
+            const holds = liveReservations.filter((r) => r.region === region).map(resToUI)
             const laid = assignLanes(
-              [...items].sort((a, b) => parseISO(a.start) - parseISO(b.start)),
+              [...items, ...holds].sort((a, b) => parseISO(a.start) - parseISO(b.start)),
             )
             const laneCount = Math.max(1, ...laid.map((it) => it.lane + 1))
             const trackH = isCollapsed
@@ -601,6 +668,32 @@ export default function Schedule() {
                     const left  = (cs / NUM_DAYS) * 100
                     const width = ((ce - cs + 1) / NUM_DAYS) * 100
                     const approved = b.status === 'approved'
+
+                    // Holds render as dashed ghost bars with a live countdown.
+                    if (b.isReservation) {
+                      return (
+                        <button
+                          key={b.id}
+                          className="sched-bar sched-bar-res"
+                          style={{
+                            left: `${left}%`,
+                            width: `calc(${width}% - 4px)`,
+                            top: PAD + b.lane * (LANE_H + LANE_GAP),
+                            height: LANE_H,
+                            boxSizing: 'border-box',
+                          }}
+                          onClick={() => setViewingRes(b)}
+                          title={`Reserved by ${b.requesterName || b.requesterEmail} — ${b.reason || 'no reason given'}`}
+                        >
+                          <span className="b-title">Reserved · {b.operationLabel}</span>
+                          <span className="b-sub">{b.companyName || '—'}</span>
+                          <span className="b-foot">
+                            {b.startTime ? `${b.startTime} · ` : ''}expires in {fmtRemaining(b.expiresAt, now)}
+                          </span>
+                        </button>
+                      )
+                    }
+
                     return (
                       <button
                         key={b.id}
@@ -675,6 +768,16 @@ export default function Schedule() {
         <BlockDetailModal block={viewingBlock} onClose={() => setViewingBlock(null)} />
       )}
 
+      {viewingRes && (
+        <ReservationDetailModal
+          res={viewingRes}
+          now={now}
+          canRelease={isAdmin || viewingRes.requesterEmail?.toLowerCase() === actorEmail.toLowerCase()}
+          onRelease={() => releaseHold(viewingRes.groupId)}
+          onClose={() => setViewingRes(null)}
+        />
+      )}
+
       {showBlocks && isAdmin && (
         <BlockModal
           blocks={blocks}
@@ -716,6 +819,67 @@ function BlockDetailModal({ block, onClose }) {
           </div>
           {block.createdBy && (
             <div style={row}><span style={key}>Set by</span><span style={{ color: D_INK }}>{block.createdBy}</span></div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ===========================================================================
+// ReservationDetailModal – a soft hold: why it exists, who holds it, when it dies
+// ===========================================================================
+function ReservationDetailModal({ res, now, canRelease, onRelease, onClose }) {
+  const R_INK = '#242424', R_MUTED = '#605e5c'
+  const row = { display: 'flex', gap: 8, padding: '5px 0', fontSize: '0.85rem' }
+  const key = { color: R_MUTED, flex: '0 0 90px' }
+  const when = res.start === res.end
+    ? fmtDate(res.start)
+    : `${fmtDate(res.start)} – ${fmtDate(res.end)}`
+
+  return (
+    <div className="sched-overlay" onClick={onClose}>
+      <div className="sched-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+        <div className="sched-modal-head">
+          <div>
+            <h3>Reserved · {res.operationLabel}</h3>
+            <span style={{ fontSize: '0.78rem', color: R_MUTED }}>
+              Soft hold — not submitted for approval
+            </span>
+          </div>
+          <button className="sched-x" aria-label="Close" onClick={onClose}>×</button>
+        </div>
+        <div className="sched-modal-body">
+          <div style={row}><span style={key}>Customer</span>
+            <span style={{ color: res.companyName ? R_INK : R_MUTED }}>
+              {res.companyName || '—'}{res.cid ? ` · ${res.cid}` : ''}
+            </span>
+          </div>
+          <div style={row}><span style={key}>When</span><span style={{ color: R_INK }}>{when}</span></div>
+          {res.startTime && (
+            <div style={row}><span style={key}>Time</span><span style={{ color: R_INK }}>{res.startTime}</span></div>
+          )}
+          <div style={row}><span style={key}>Region</span><span style={{ color: R_INK }}>{res.region}</span></div>
+          <div style={row}><span style={key}>Held by</span>
+            <span style={{ color: R_INK }}>{res.requesterName || res.requesterEmail}</span>
+          </div>
+          <div style={row}><span style={key}>Reason</span>
+            <span style={{ color: res.reason ? R_INK : R_MUTED }}>{res.reason || 'None given'}</span>
+          </div>
+          <div style={row}><span style={key}>Expires</span>
+            <span style={{ color: R_INK }}>in {fmtRemaining(res.expiresAt, now)}</span>
+          </div>
+
+          {canRelease && (
+            <button
+              onClick={onRelease}
+              style={{
+                marginTop: 14, padding: '6px 12px', fontSize: '0.8rem', borderRadius: 5,
+                cursor: 'pointer', border: '1px solid #d7d5d2', background: '#fff', color: '#b91c1c',
+              }}
+            >
+              Release this hold
+            </button>
           )}
         </div>
       </div>

@@ -6,6 +6,7 @@ import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
 import { notifyApproversForBooking } from '../lib/notifications'
 import { listBlocks } from '../lib/blocks'
 import { listRequesters } from '../lib/userStore'
+import { listReservations, createReservations } from '../lib/reservations'
 
 const OPERATION_TYPES = {
   build: {
@@ -160,6 +161,13 @@ function App() {
   // admin-set schedule blocks (per region, whole-day or single slot).
   const [blocks, setBlocks] = useState([])
 
+  // soft holds — CSMs reserving candidate dates before committing to one.
+  const [reservations, setReservations] = useState([])
+  const [mode, setMode] = useState("book")          // "book" | "reserve"
+  const [reserveSlots, setReserveSlots] = useState([])   // [{date, time}]
+  const [reserveReason, setReserveReason] = useState("")
+  const [fromGroupId, setFromGroupId] = useState(null)   // converting a hold
+
   // details
   const [bookerName, setBookerName] = useState("")
   const [csmEmail, setCsmEmail] = useState("")
@@ -180,6 +188,9 @@ function App() {
 
   // Load schedule blocks so the calendar can gray out blocked days/slots.
   useEffect(() => { listBlocks().then(setBlocks).catch(() => {}) }, [])
+
+  const loadReservations = () => listReservations().then(setReservations).catch(() => {})
+  useEffect(() => { loadReservations() }, [])
   useEffect(() => { listRequesters().then(setCsmEmails).catch(() => {}) }, [])
 
   // Normalize backend rows (snake_case) to the shape the calendar logic needs.
@@ -219,14 +230,45 @@ function App() {
     )
   }
 
+  // Live holds belonging to someone other than the current CSM. Your own holds
+  // never block you — converting one into a booking is the whole point.
+  const othersHolds = useMemo(
+    () => reservations.filter((r) => r.requesterEmail.toLowerCase() !== (csmEmail || "").toLowerCase()),
+    [reservations, csmEmail]
+  )
+
+  // Slots another CSM is holding for a region + day.
+  const reservedSlots = (region, day) => {
+    const iso = fmtISO(day)
+    return new Set(
+      othersHolds
+        .filter((r) => r.region === region && r.date === iso && r.time)
+        .map((r) => r.time)
+    )
+  }
+
+  // Your own live holds, newest group first — offered as a shortcut on the form.
+  const myHolds = useMemo(
+    () => reservations.filter((r) => r.requesterEmail.toLowerCase() === (csmEmail || "").toLowerCase()),
+    [reservations, csmEmail]
+  )
+
   // How many builds occupy a given region on a given calendar day. A build
   // occupies its whole 5-business-day span, not just its start date.
+  // Reserved builds consume capacity exactly like real ones — otherwise another
+  // CSM books straight over the hold. Only *other* CSMs' holds count, so your
+  // own candidate dates never lock you out of booking them.
   const buildCountOnDay = (region, day) => {
     const iso = fmtISO(day)
     let n = 0
     for (const b of existing) {
       if (b.region !== region || b.op !== "build" || !b.start) continue
       const span = businessDaysFrom(parseISO(b.start), OPERATION_TYPES.build.spanBusinessDays)
+      if (span.some((d) => fmtISO(d) === iso)) n++
+    }
+    for (const r of othersHolds) {
+      if (r.region !== region || opKey(r.operationType) !== "build" || !r.date) continue
+      const span = businessDaysFrom(parseISO(r.date), OPERATION_TYPES.build.spanBusinessDays)
       if (span.some((d) => fmtISO(d) === iso)) n++
     }
     return n
@@ -251,7 +293,10 @@ function App() {
   const regionSlots = region && cfg?.pickTime ? slotsFor(region, operationType, hours) : []
   const takenSet = region && date && cfg?.pickTime ? takenSlots(region, date) : new Set()
   const blockedSet = region && date && cfg?.pickTime ? blockedSlots(region, date) : new Set()
-  const freeSlots = regionSlots.filter((s) => !takenSet.has(s) && !blockedSet.has(s))
+  const reservedSet = region && date && cfg?.pickTime ? reservedSlots(region, date) : new Set()
+  const freeSlots = regionSlots.filter(
+    (s) => !takenSet.has(s) && !blockedSet.has(s) && !reservedSet.has(s)
+  )
 
   const selectedEnv = company && environmentSysId
     ? company.environments.find((e) => e.sys_id === environmentSysId)
@@ -369,8 +414,9 @@ function App() {
       const slots = slotsFor(region, operationType, hours)
       const taken = takenSlots(region, day)
       const blocked = blockedSlots(region, day)
-      // Day is unusable if every slot is either taken or blocked.
-      if (slots.length > 0 && slots.every((s) => taken.has(s) || blocked.has(s))) return false
+      const held = reservedSlots(region, day)
+      // Day is unusable if every slot is taken, blocked, or held by another CSM.
+      if (slots.length > 0 && slots.every((s) => taken.has(s) || blocked.has(s) || held.has(s))) return false
     }
     return true
   }
@@ -424,6 +470,8 @@ function App() {
       notes: privateNotes || null,
       requester_email: csmEmail || null,
       requester_name: bookerName || null,
+      // Booking a held date releases the whole candidate set in one transaction.
+      reservation_group_id: fromGroupId,
     }
 
     try {
@@ -434,7 +482,9 @@ function App() {
       })
       if (res.ok) {
         alert("Booking saved!")
-        loadBookings()   // refresh capacity so the calendar reflects this booking
+        setFromGroupId(null)
+        loadBookings()      // refresh capacity so the calendar reflects this booking
+        loadReservations()  // the converted group is now released
       } else {
         let detail = "status " + res.status
         try { detail = (await res.json()).detail || detail } catch {}
@@ -446,7 +496,57 @@ function App() {
     }
   }
 
+  // --- reserve mode ---------------------------------------------------------
+  const slotKey = (sl) => `${sl.date}|${sl.time || ""}`
+
+  const addCandidate = () => {
+    if (!date) return
+    const sl = { date: fmtISO(date), time: cfg?.pickTime ? time : "" }
+    if (reserveSlots.some((x) => slotKey(x) === slotKey(sl))) return
+    setReserveSlots([...reserveSlots, sl])
+    setDate(null)
+    setTime("")
+  }
+  const removeCandidate = (sl) =>
+    setReserveSlots(reserveSlots.filter((x) => slotKey(x) !== slotKey(sl)))
+
+  const handleReserve = async () => {
+    try {
+      await createReservations({
+        operationType,
+        region,
+        slots: reserveSlots,
+        companyName: company?.name ?? (companyQuery.trim() || null),
+        cid: cid || null,
+        reason: reserveReason,
+        requesterEmail: csmEmail,
+        requesterName: bookerName || null,
+      })
+      alert(`Reserved ${reserveSlots.length} date(s) — held for 7 days.`)
+      setReserveSlots([])
+      setReserveReason("")
+      loadReservations()
+    } catch (e) {
+      alert("Reserve failed — " + e.message)
+    }
+  }
+
+  // Load one of your held dates back into the form, ready to book for real.
+  const useHold = (r) => {
+    setMode("book")
+    setFromGroupId(r.groupId)
+    setOperationType(r.operationType)
+    setRegion(r.region)
+    setDate(parseISO(r.date))
+    setTime(r.time || "")
+    if (r.companyName && !companyQuery) setCompanyQuery(r.companyName)
+    if (r.cid && !cid) setCid(r.cid)
+  }
+
   const canBook = !!operationType && !!region && !!date && (!cfg.pickTime || !!time)
+  const canAddCandidate = !!operationType && !!region && !!date && (!cfg?.pickTime || !!time)
+  const canReserve =
+    reserveSlots.length > 0 && !!csmEmail && !!reserveReason.trim() && !!operationType && !!region
 
   const linkBtn = { background: "none", border: "none", color: "#3a5bbf", cursor: "pointer", padding: 0, fontSize: "0.85em" }
   const comboList = { position: "absolute", left: 0, right: 0, top: "100%", zIndex: 20, marginTop: 2, maxHeight: 220, overflowY: "auto", background: "#fff", border: "1px solid #cdd6e4", borderRadius: 6, boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }
@@ -454,6 +554,62 @@ function App() {
 
   return (
     <>
+        {/* Book vs Reserve — reserve is a soft hold: no approval, expires in 7 days. */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          {[["book", "Book"], ["reserve", "Reserve dates"]].map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setMode(m); setFromGroupId(null) }}
+              style={{
+                padding: "6px 14px", fontSize: "0.85rem", borderRadius: 6, cursor: "pointer",
+                border: `1px solid ${mode === m ? "#3a5bbf" : "#cdd6e4"}`,
+                background: mode === m ? "#3a5bbf" : "#fff",
+                color: mode === m ? "#fff" : "#605e5c",
+                fontWeight: mode === m ? 600 : 400,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {mode === "reserve" && (
+          <div className="warning-box" style={{ background: "#f5f3ff", borderColor: "#c4b5fd" }}>
+            <strong>Soft hold.</strong> Reserved dates aren't sent for approval — they just stop
+            other CSMs booking them. They expire automatically after 7 days.
+          </div>
+        )}
+
+        {mode === "book" && myHolds.length > 0 && (
+          <div className="warning-box" style={{ background: "#f5f3ff", borderColor: "#c4b5fd" }}>
+            <div style={{ marginBottom: 6 }}><strong>Your reserved dates</strong> — pick one to book for real:</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {myHolds.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => useHold(r)}
+                  style={{
+                    padding: "4px 9px", fontSize: "0.78rem", borderRadius: 5, cursor: "pointer",
+                    border: `1px solid ${fromGroupId === r.groupId ? "#6d28d9" : "#c4b5fd"}`,
+                    background: fromGroupId === r.groupId ? "#ede9fe" : "#fff", color: "#4c1d95",
+                  }}
+                >
+                  {fmtShort(parseISO(r.date))}{r.time ? ` · ${r.time}` : ""} · {r.region}
+                  {r.companyName ? ` · ${r.companyName}` : ""}
+                </button>
+              ))}
+            </div>
+            {fromGroupId && (
+              <div style={{ marginTop: 6, fontSize: "0.8rem" }}>
+                Booking this releases the rest of that reserved set.{" "}
+                <button type="button" onClick={() => setFromGroupId(null)} style={linkBtn}>Cancel</button>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="field">
           <label>Operation type</label>
           <select value={operationType} onChange={(e) => onTypeChange(e.target.value)}>
@@ -643,7 +799,7 @@ function App() {
                       disabled={!selectable}
                       title={
                         dayBlocked ? `Blocked for ${region}`
-                        : buildFull ? `${region} at build capacity for this window`
+                        : buildFull ? `${region} at build capacity for this window (bookings or held dates)`
                         : span ? "Reserved build day"
                         : undefined
                       }
@@ -681,7 +837,9 @@ function App() {
                   {regionSlots.map((t) => {
                     const taken = takenSet.has(t)
                     const blocked = blockedSet.has(t)
-                    const disabled = taken || blocked
+                    const held = reservedSet.has(t)
+                    const already = reserveSlots.some((x) => x.date === fmtISO(date) && x.time === t)
+                    const disabled = taken || blocked || held
                     return (
                       <button
                         key={t}
@@ -689,13 +847,15 @@ function App() {
                         disabled={disabled}
                         title={
                           blocked ? "Blocked by an admin"
+                          : held ? "Reserved by another CSM"
                           : taken ? "Already booked for this region / day"
                           : undefined
                         }
                         className={"slot" + (time === t ? " selected" : "") + (disabled ? " taken" : "")}
+                        style={already ? { borderColor: "#8b5cf6", background: "#f5f3ff" } : undefined}
                         onClick={() => setTime(t)}
                       >
-                        {t}{blocked ? " · blocked" : taken ? " · booked" : ""}
+                        {t}{blocked ? " · blocked" : held ? " · reserved" : taken ? " · booked" : already ? " · added" : ""}
                       </button>
                     )
                   })}
@@ -746,8 +906,70 @@ function App() {
           <textarea value={privateNotes} onChange={(e) => setPrivateNotes(e.target.value)} />
         </div>
 
+        {mode === "reserve" && (
+          <>
+            <div className="field">
+              <label>Why are these dates being held?</label>
+              <textarea
+                value={reserveReason}
+                onChange={(e) => setReserveReason(e.target.value)}
+                placeholder="e.g. Awaiting customer confirmation on the cutover window"
+              />
+            </div>
+
+            <div className="field">
+              <label>Candidate dates ({reserveSlots.length})</label>
+              <button
+                type="button"
+                onClick={addCandidate}
+                disabled={!canAddCandidate}
+                style={{ ...linkBtn, fontSize: "0.85rem", opacity: canAddCandidate ? 1 : 0.5 }}
+              >
+                + Add the selected date{cfg?.pickTime ? " & time" : ""}
+              </button>
+              {reserveSlots.length === 0 ? (
+                <div className="cal-hint" style={{ marginTop: 6 }}>
+                  Pick a date above{cfg?.pickTime ? " and a start time" : ""}, then add it. Repeat for
+                  each date you want to hold.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                  {reserveSlots.map((sl) => (
+                    <span
+                      key={slotKey(sl)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 9px",
+                        borderRadius: 5, fontSize: "0.78rem", background: "#f5f3ff",
+                        border: "1px solid #c4b5fd", color: "#4c1d95",
+                      }}
+                    >
+                      {fmtShort(parseISO(sl.date))}{sl.time ? ` · ${sl.time}` : ""}
+                      <button
+                        type="button"
+                        onClick={() => removeCandidate(sl)}
+                        style={{ ...linkBtn, color: "#6d28d9", fontSize: "1rem", lineHeight: 1 }}
+                        aria-label="Remove"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
         <div className="book-row">
-          <button type="button" className="book-btn" onClick={handleBook} disabled={!canBook}>Book</button>
+          {mode === "book" ? (
+            <button type="button" className="book-btn" onClick={handleBook} disabled={!canBook}>
+              Book
+            </button>
+          ) : (
+            <button type="button" className="book-btn" onClick={handleReserve} disabled={!canReserve}>
+              Reserve {reserveSlots.length || ""} date{reserveSlots.length === 1 ? "" : "s"}
+            </button>
+          )}
         </div>
     </>
   )

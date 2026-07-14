@@ -33,6 +33,25 @@ CREATE TABLE IF NOT EXISTS bookings (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS reservations (
+    id SERIAL PRIMARY KEY,
+    group_id TEXT NOT NULL,                -- one CSM's set of candidate dates
+    operation_type TEXT NOT NULL,
+    region TEXT NOT NULL,
+    scheduled_date TEXT NOT NULL,
+    scheduled_time TEXT,                   -- NULL for builds (no time-of-day)
+    company_name TEXT,
+    cid TEXT,
+    reason TEXT,
+    requester_email TEXT NOT NULL,
+    requester_name TEXT,
+    expires_at TIMESTAMPTZ NOT NULL,
+    released_at TIMESTAMPTZ,               -- set on convert-to-booking or cancel
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_reservations_group ON reservations (group_id);
+CREATE INDEX IF NOT EXISTS idx_reservations_lookup ON reservations (region, scheduled_date);
+
 CREATE TABLE IF NOT EXISTS schedule_blocks (
     id SERIAL PRIMARY KEY,
     block_date TEXT NOT NULL,              -- range start

@@ -87,20 +87,45 @@ async def create_booking(booking: BookingCreate):
     if blocked:
         raise HTTPException(409, "This date/time is blocked for the selected region")
 
-    row = await pool.fetchrow(
-        """INSERT INTO bookings
-               (operation_type, region, scheduled_date, scheduled_time,
-                company_name, company_id, cid, environment_id, environment_name,
-                host_region, notes, requester_email, requester_name)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-           RETURNING *""",
-        booking.operation_type, booking.region,
-        booking.scheduled_date, booking.scheduled_time,
-        booking.company_name, booking.company_id,
-        booking.environment_id, booking.environment_name,
-        booking.host_region, booking.notes,
-        booking.requester_email, booking.requester_name,
+    # Reject a slot another CSM is holding. Your own reservation never blocks
+    # you — booking it is exactly how a hold is meant to be converted.
+    requester = (booking.requester_email or "").lower()
+    reserved = await pool.fetchval(
+        """SELECT count(*) FROM reservations
+           WHERE released_at IS NULL AND expires_at > now()
+             AND region = $1 AND scheduled_date = $2
+             AND COALESCE(scheduled_time, '') = COALESCE($3, '')
+             AND lower(requester_email) IS DISTINCT FROM $4""",
+        booking.region, booking.scheduled_date, booking.scheduled_time, requester,
     )
+    if reserved:
+        raise HTTPException(409, "This date/time is reserved by another CSM")
+
+    # Insert and release the CSM's reservation group together, so a hold can
+    # never survive its own conversion (or be dropped without a booking).
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                """INSERT INTO bookings
+                       (operation_type, region, scheduled_date, scheduled_time,
+                        company_name, company_id, cid, environment_id, environment_name,
+                        host_region, notes, requester_email, requester_name)
+                   VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                   RETURNING *""",
+                booking.operation_type, booking.region,
+                booking.scheduled_date, booking.scheduled_time,
+                booking.company_name, booking.company_id, booking.cid,
+                booking.environment_id, booking.environment_name,
+                booking.host_region, booking.notes,
+                booking.requester_email, booking.requester_name,
+            )
+            if booking.reservation_group_id:
+                await conn.execute(
+                    """UPDATE reservations SET released_at = now()
+                       WHERE group_id = $1 AND released_at IS NULL
+                         AND lower(requester_email) = $2""",
+                    booking.reservation_group_id, requester,
+                )
     return _row(row)
 
 

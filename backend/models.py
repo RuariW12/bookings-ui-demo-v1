@@ -48,6 +48,8 @@ class BookingCreate(BaseModel):
     notes: str | None = None
     requester_email: str | None = None
     requester_name: str | None = None
+    # When set, booking this slot releases the CSM's whole reservation group.
+    reservation_group_id: str | None = None
 
 
 class BookingUpdate(BaseModel):
@@ -127,4 +129,37 @@ class BlockOut(BaseModel):
     regions: list[str]
     reason: str | None
     created_by: str | None
+    created_at: datetime
+
+# --- reservations -----------------------------------------------------------
+class ReservationSlot(BaseModel):
+    scheduled_date: str
+    scheduled_time: str | None = None   # None for builds
+
+
+class ReservationCreate(BaseModel):
+    operation_type: str
+    region: str
+    slots: list[ReservationSlot]
+    company_name: str | None = None
+    cid: str | None = None
+    reason: str
+    requester_email: str
+    requester_name: str | None = None
+
+
+class ReservationOut(BaseModel):
+    id: int
+    group_id: str
+    operation_type: str
+    region: str
+    scheduled_date: str
+    scheduled_time: str | None
+    company_name: str | None
+    cid: str | None
+    reason: str | None
+    requester_email: str
+    requester_name: str | None
+    expires_at: datetime
+    released_at: datetime | None
     created_at: datetime

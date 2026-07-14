@@ -450,3 +450,14 @@ textarea.alloc-box { min-height: 64px; resize: vertical; }
   align-items: center;
 }
 .sched-rowlabel.collapsed .rl-name { font-size: 13px; }
+/* reserved (soft hold) bars */
+.sched-bar-res {
+  background: #f5f3ff;
+  border: 1px dashed #8b5cf6;
+  border-left: 4px solid #8b5cf6;
+  border-radius: 3px;
+  color: #4c1d95;
+  opacity: 0.9;
+}
+.sched-bar-res .b-title { font-style: italic; }
+.sched-bar-res:hover { opacity: 1; }
