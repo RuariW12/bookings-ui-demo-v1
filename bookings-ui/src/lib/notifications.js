@@ -1,7 +1,7 @@
 // notifications.js — approval reminders via Microsoft Graph.
 // Stubbed for now; flip SEND_LIVE once Graph access + a Teams webhook land.
-import { approversForRegion } from './userConfig'
-import { getGraphToken} from './msalConfig'
+import { approversForRegion } from './userStore'
+import { getGraphToken } from './msalConfig'
 
 const SEND_LIVE = false
 
@@ -25,7 +25,6 @@ function buildEmail(booking, approverEmail) {
   }
 }
 
-
 async function sendEmail(payload) {
   if (!SEND_LIVE) { console.log('[stub] Outlook email →', payload); return { ok: true, stub: true } }
   const token = await getGraphToken()
@@ -40,10 +39,9 @@ async function sendEmail(payload) {
   return { ok: res.ok }
 }
 
-
 // Fire reminders to every approver scoped to the booking's region.
 export async function notifyApproversForBooking(booking) {
-  const approvers = approversForRegion(booking.region)
+  const approvers = await approversForRegion(booking.region)
   const results = []
   for (const email of approvers) {
     results.push(await sendEmail(buildEmail(booking, email)))
