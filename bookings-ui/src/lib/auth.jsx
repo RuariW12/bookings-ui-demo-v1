@@ -1,6 +1,6 @@
-// auth.jsx — swappable auth boundary.
+// auth.jsx — swappable auth boundary. Role source is Postgres via userStore.fetchMe.
 import { createContext, useContext, useState } from 'react'
-import { resolveUser, canApproveRegion } from './userConfig'
+import { fetchMe } from './userStore'
 import { msalInstance, loginRequest } from './msalConfig'
 
 const AuthContext = createContext(null)
@@ -10,12 +10,12 @@ let msalReady = false
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
 
-  function applyUser(email, name) {
-    const resolved = resolveUser(email)
+  async function applyUser(email, name) {
+    const resolved = await fetchMe(email)   // null => not authorized
     if (!resolved) return false
     setUser({
-      email: email.toLowerCase(),
-      name,
+      email: resolved.email,
+      name: resolved.displayName || name || resolved.email.split('@')[0],
       role: resolved.role,
       isAdmin: resolved.role === 'admin',
       isApprover: resolved.role === 'approver',
@@ -42,8 +42,12 @@ export function AuthProvider({ children }) {
       setUser(null)
       msalInstance.logoutPopup().catch(() => {})
     },
-    canApproveRegion: (region) =>
-      user ? canApproveRegion(user.email, region) : false,
+    canApproveRegion: (region) => {
+      if (!user) return false
+      if (user.role !== 'approver' && user.role !== 'admin') return false
+      const regions = user.approverRegions || []
+      return regions.includes('*') || regions.includes(region)
+    },
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
