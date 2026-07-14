@@ -33,6 +33,20 @@ def _within_actor_regions(actor, target_regions):
         raise HTTPException(403, f"Outside your region scope: {', '.join(outside)}")
 
 
+@router.get("/me", response_model=UserOut)
+async def get_me(email: str):
+    # Single role source + login allowlist gate: not in the table (or inactive) => 403.
+    if not email:
+        raise HTTPException(400, "email is required")
+    pool = await get_pool()
+    row = await pool.fetchrow(
+        "SELECT * FROM users WHERE email = $1 AND active = true", email.lower()
+    )
+    if not row:
+        raise HTTPException(403, "Your account is not authorized for this app")
+    return row_to_user(row)
+
+
 @router.get("", response_model=list[UserOut])
 async def list_users():
     pool = await get_pool()
@@ -51,7 +65,6 @@ async def create_user(user: UserCreate, actor_email: str):
         raise HTTPException(400, "This role must have at least one region")
 
     target_regions = [] if user.role == "requester" else user.regions
-    # Region scope bounds admin authority only; approvers may be assigned any region.
     if user.role == "admin":
         _within_actor_regions(actor, target_regions)
 
@@ -88,8 +101,6 @@ async def update_user(user_id: int, update: UserUpdate, actor_email: str):
     elif not new_regions:
         raise HTTPException(400, "This role must have at least one region")
 
-    # Guard admin authority only: protect existing admins from out-of-scope edits,
-    # bound new admin grants. Approver regions are unrestricted.
     if existing["role"] == "admin":
         _within_actor_regions(actor, list(existing["regions"] or []))
     if new_role == "admin":
