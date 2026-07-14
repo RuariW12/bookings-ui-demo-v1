@@ -40,7 +40,7 @@ function toUI(b) {
     operationType: b.operation_type,
     operationLabel: OP_LABELS[b.operation_type] || b.operation_type,
     title: b.company_name || '—',
-    cid: b.company_id || '',
+    cid: b.cid || '',
     region: b.region,
     start: b.scheduled_date,
     end: null,
