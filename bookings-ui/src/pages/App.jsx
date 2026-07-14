@@ -476,6 +476,7 @@ function App() {
       scheduled_time: payload.startTime ?? "",
       company_name: payload.companyName,
       company_id: companySysId || null,          // SNOW account sys_id → case "account"
+      cid: cid || null,
       environment_id: environmentSysId || null,  // SNOW DSI sys_id → case "u_dsi"
       environment_name: environment || null,
       host_region: null,                         // no host-region field in SNOW
