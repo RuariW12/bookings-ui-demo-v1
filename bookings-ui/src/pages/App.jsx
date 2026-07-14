@@ -5,6 +5,7 @@ import { getCompany, activeEnvironments, listCompanies } from '../lib/servicenow
 import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
 import { notifyApproversForBooking } from '../lib/notifications'
 import { listBlocks } from '../lib/blocks'
+import { listRequesters } from '../lib/userStore'
 
 const OPERATION_TYPES = {
   build: {
@@ -38,72 +39,6 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ]
 
-const CSM_EMAILS = [
-  // example //
-  "rwhalen@strategy.com",
-  // -- Anibal Sampalione --
-  "falterleib@microstrategy.com",
-  "fsastre@microstrategy.com",
-  "mfidalgo@microstrategy.com",
-  "lguglialmelli@microstrategy.com",
-  "smartino@microstrategy.com",
-  "edgarcia@microstrategy.com",
-  // -- David Underwood --
-  "cnagelschmitz@microstrategy.com",
-  "yvanchenko@microstrategy.com",
-  "mrielau@microstrategy.com",
-  "omarchal@microstrategy.com",
-  "wcruz@microstrategy.com",
-  "vsolignac@microstrategy.com",
-  "dpaschoud@microstrategy.com",
-  // -- Francesca Laurie --
-  "cpisonero@microstrategy.com",
-  "jhlee@microstrategy.com",
-  "svadgama@microstrategy.com",
-  "frausell@strategy.com",
-  "ksakamoto@microstrategy.com",
-  "pasingh@microstrategy.com",
-  "alacuna@microstrategy.com",
-  // -- Jane Hall --
-  "mscaggs@microstrategy.com",
-  "rlam@microstrategy.com",
-  "ngerontiev@microstrategy.com",
-  "dstout@microstrategy.com",
-  "mbanos@microstrategy.com",
-  "anogalpoziombka@microstrategy.com",
-  "togrady@microstrategy.com",
-  "kforth@microstrategy.com",
-  // -- Neeraj Bindra --
-  "mharouaka@microstrategy.com",
-  "nskees@microstrategy.com",
-  "jheagerty@microstrategy.com",
-  "gpullis@microstrategy.com",
-  "epayne@microstrategy.com",
-  // -- Zeena Husayni --
-  "asampalione@microstrategy.com",
-  "csegal@microstrategy.com",
-  "tmiekisz@microstrategy.com",
-  "lkirzner@microstrategy.com",
-  "lneslin@microstrategy.com",
-  // -- Sunil Vadgama --
-  "pkaushal@microstrategy.com",
-  "ptidke@microstrategy.com",
-  "snaik@microstrategy.com",
-  "alambat@microstrategy.com",
-  "sveer@microstrategy.com",
-  // -- Veronica Solignac --
-  "bcolin@microstrategy.com",
-  "abhagat@microstrategy.com",
-  "jfaulknerjones@microstrategy.com",
-  "aburns@microstrategy.com",
-  // -- More teams --
-  "aupadhyay@microstrategy.com",
-  // -- Internal --
-  "ctmoperations@strategyInternal.com",
-  // -- Other CSMs --
-  "miyamamoto@microstrategy.com",
-  "bbahia@microstrategy.com",
-]
 
 // --- date helpers ----------------------------------------------------------
 function startOfToday() {
@@ -228,6 +163,7 @@ function App() {
   // details
   const [bookerName, setBookerName] = useState("")
   const [csmEmail, setCsmEmail] = useState("")
+  const [csmEmails, setCsmEmails] = useState("")
   const [utilityBox, setUtilityBox] = useState("")
   const [privateNotes, setPrivateNotes] = useState("")
 
@@ -244,6 +180,7 @@ function App() {
 
   // Load schedule blocks so the calendar can gray out blocked days/slots.
   useEffect(() => { listBlocks().then(setBlocks).catch(() => {}) }, [])
+  useEffect(() => { listRequesters().then(setCsmEmails).catch(() => {}) }, [])
 
   // Normalize backend rows (snake_case) to the shape the calendar logic needs.
   // Cancelled / rejected bookings don't occupy capacity.

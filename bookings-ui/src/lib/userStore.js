@@ -99,3 +99,12 @@ export async function setActive(email, active, actorEmail) {
   if (!res.ok) throw new Error(await readError(res))
   return toUI(await res.json())
 }
+
+// Active requesters — the CSM dropdown on the Book tab.
+export async function listRequesters() {
+  const users = await listUsers()
+  return users
+    .filter((u) => u.active && u.role === 'requester')
+    .map((u) => u.email)
+    .sort()
+}
