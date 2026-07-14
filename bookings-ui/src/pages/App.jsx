@@ -163,7 +163,7 @@ function App() {
   // details
   const [bookerName, setBookerName] = useState("")
   const [csmEmail, setCsmEmail] = useState("")
-  const [csmEmails, setCsmEmails] = useState("")
+  const [csmEmails, setCsmEmails] = useState([])
   const [utilityBox, setUtilityBox] = useState("")
   const [privateNotes, setPrivateNotes] = useState("")
 
@@ -724,7 +724,7 @@ function App() {
           <label>CSM email address</label>
           <select value={csmEmail} onChange={(e) => setCsmEmail(e.target.value)}>
             <option value="">-- select an option --</option>
-            {CSM_EMAILS.map((email) => <option key={email} value={email}>{email}</option>)}
+            {csmEmails.map((email) => <option key={email} value={email}>{email}</option>)}
           </select>
         </div>
 
