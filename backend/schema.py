@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     scheduled_time TEXT NOT NULL,
     company_name TEXT,
     company_id TEXT,
+    cid TEXT,
     environment_id TEXT,
     environment_name TEXT,
     host_region TEXT,
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS schedule_blocks (
 # Idempotent ALTERs for databases created before a column existed.
 MIGRATIONS = """
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS assignees JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cid TEXT;
 """
 
 
