@@ -33,9 +33,14 @@ export default function Login() {
     }
   }
 
-  function handleDemo(q) {
-    const ok = signIn(q.email, q.name)
-    if (!ok) setError('Demo account not in user config.')
+async function handleDemo(q) {
+    setError('')
+    try {
+      const ok = await signIn(q.email, q.name)
+      if (!ok) setError('Demo account is not a registered user.')
+    } catch {
+      setError('Sign-in failed. Please try again.')
+    }
   }
 
   return (
