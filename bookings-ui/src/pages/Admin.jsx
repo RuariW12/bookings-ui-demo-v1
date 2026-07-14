@@ -89,6 +89,14 @@ export default function Admin() {
       <p style={{ fontSize: '0.85rem', color: MUTED, margin: '0 0 18px' }}>
         Manage requesters, approvers, and admins within your regions. Seeded accounts are read-only.
       </p>
+      <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: INK, marginBottom: 8 }}>What each role can do</div>
+        <div style={{ fontSize: '0.8rem', color: MUTED, lineHeight: 1.5 }}>
+          <div><strong style={{ color: INK }}>Requester</strong> — books Parallel Build work. No approval or admin rights.</div>
+          <div><strong style={{ color: INK }}>Approver</strong> — approves/rejects bookings and staffs them, within their assigned regions.</div>
+          <div><strong style={{ color: INK }}>Admin</strong> — everything an approver does, plus manages users and blocks dates — all scoped to the regions they hold.</div>
+        </div>
+      </div>
 
       {/* Add user */}
       <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
