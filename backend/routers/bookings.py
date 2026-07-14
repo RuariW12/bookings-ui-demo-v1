@@ -88,9 +88,9 @@ async def create_booking(booking: BookingCreate):
     row = await pool.fetchrow(
         """INSERT INTO bookings
                (operation_type, region, scheduled_date, scheduled_time,
-                company_name, company_id, environment_id, environment_name,
+                company_name, company_id, cid, environment_id, environment_name,
                 host_region, notes, requester_email, requester_name)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
            RETURNING *""",
         booking.operation_type, booking.region,
         booking.scheduled_date, booking.scheduled_time,
