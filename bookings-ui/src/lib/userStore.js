@@ -1,10 +1,6 @@
-// userStore.js — user & role management.
-// Talks to the backend user API. Every mutating call carries the acting admin's
-// email (actorEmail) so the backend can enforce region-bounded scope.
-
+// userStore.js — user & role management. Postgres is the single role source.
 export const REGIONS = ['CLD-HQ', 'CLD-CTC', 'CLD-EMEA']
 
-// Backend UserOut (snake_case) → UI shape (camelCase).
 function toUI(u) {
   return {
     id: u.id,
@@ -17,7 +13,6 @@ function toUI(u) {
   }
 }
 
-// Surface the backend's error detail so Admin.jsx's catch shows a useful message.
 async function readError(res) {
   try {
     const body = await res.json()
@@ -27,6 +22,24 @@ async function readError(res) {
   }
 }
 
+// Resolve the signed-in user. null => not on the allowlist (403/404); throws on real failure.
+export async function fetchMe(email) {
+  const q = new URLSearchParams({ email: (email || '').toLowerCase() })
+  const res = await fetch(`/api/users/me?${q}`)
+  if (res.status === 403 || res.status === 404) return null
+  if (!res.ok) throw new Error(await readError(res))
+  return toUI(await res.json())
+}
+
+// Approvers/admins whose region scope covers `region` (used by notifications).
+export async function approversForRegion(region) {
+  const users = await listUsers()
+  return users
+    .filter((u) => u.active && (u.role === 'approver' || u.role === 'admin'))
+    .filter((u) => (u.regions || []).includes('*') || (u.regions || []).includes(region))
+    .map((u) => u.email)
+}
+
 export async function listUsers() {
   const res = await fetch('/api/users')
   if (!res.ok) throw new Error(await readError(res))
@@ -34,7 +47,6 @@ export async function listUsers() {
   return data.map(toUI)
 }
 
-// The backend PATCH route is keyed by integer id; the UI keys by email.
 async function idForEmail(email) {
   const key = (email || '').toLowerCase()
   const users = await listUsers()
