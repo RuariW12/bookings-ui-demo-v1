@@ -121,7 +121,7 @@ function toUI(b) {
     operationType: b.operation_type,
     operationLabel: meta.label,
     companyName: b.company_name || '',
-    cid: b.company_id || '',
+    cid: b.cid || '',
     environment: b.environment_name || '',
     region: b.region,
     start,
