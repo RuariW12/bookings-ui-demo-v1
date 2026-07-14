@@ -84,116 +84,122 @@ export default function Admin() {
   const sel = { padding: '4px 6px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.78rem', color: INK }
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', paddingTop: 24 }}>
-      <h2 style={{ fontSize: '1.1rem', color: INK, margin: '0 0 4px' }}>User administration</h2>
-      <p style={{ fontSize: '0.85rem', color: MUTED, margin: '0 0 18px' }}>
-        Manage requesters, approvers, and admins within your regions. Seeded accounts are read-only.
-      </p>
-      <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
-        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: INK, marginBottom: 8 }}>What each role can do</div>
-        <div style={{ fontSize: '0.8rem', color: MUTED, lineHeight: 1.5 }}>
+    <div style={{ maxWidth: 1180, margin: '0 auto', paddingTop: 24, display: 'flex', gap: 20, alignItems: 'flex-start' }}>
+      {/* Left column — everything else */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <h2 style={{ fontSize: '1.1rem', color: INK, margin: '0 0 4px' }}>User administration</h2>
+        <p style={{ fontSize: '0.85rem', color: MUTED, margin: '0 0 18px' }}>
+          Manage requesters, approvers, and admins within your regions. Seeded accounts are read-only.
+        </p>
+
+        {/* Add user */}
+        <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: INK, marginBottom: 10 }}>Add a user</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="work email"
+              style={{ flex: '1 1 200px', padding: '7px 9px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.85rem' }} />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="display name"
+              style={{ flex: '1 1 140px', padding: '7px 9px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.85rem' }} />
+            <select value={role} onChange={(e) => setRole(e.target.value)}
+              style={{ padding: '7px 9px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.85rem' }}>
+              <option value="requester">Requester</option>
+              <option value="approver">Approver</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          {role !== 'requester' && (
+            <div style={{ marginTop: 10 }}>
+              <span style={{ fontSize: '0.75rem', color: MUTED, marginRight: 6 }}>Regions:</span>
+              {regionChoices(role).map((r) => (
+                <span key={r} style={chip(newRegions.includes(r))} onClick={() => toggle(newRegions, setNewRegions, r)}>{r}</span>
+              ))}
+            </div>
+          )}
+          <button onClick={handleAdd} style={{ ...btn, marginTop: 12, background: ACCENT, color: '#fff', border: 'none', fontWeight: 600 }}>
+            Add user
+          </button>
+        </div>
+
+        {error && <p style={{ color: '#c2410c', fontSize: '0.8rem', margin: '0 0 12px' }}>{error}</p>}
+
+        {/* Search */}
+        {!loading && (
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users by name…"
+            style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', marginBottom: 10,
+              border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: '0.85rem' }} />
+        )}
+
+        {/* User table */}
+        {loading ? (
+          <p style={{ color: MUTED, fontSize: '0.85rem' }}>Loading…</p>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+            <thead>
+              <tr style={{ background: SURFACE }}>
+                {['User', 'Role', 'Regions', 'Status', 'Actions'].map((h) => (
+                  <th key={h} style={{ ...cell, fontWeight: 600, color: MUTED, textAlign: 'left', fontSize: '0.72rem', textTransform: 'uppercase' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.map((u) => {
+                const isEditing = editing === u.email
+                return (
+                  <tr key={u.email} style={{ opacity: u.active ? 1 : 0.5 }}>
+                    <td style={cell}>
+                      <div style={{ fontWeight: 600 }}>{u.displayName || u.email.split('@')[0]}</div>
+                      <div style={{ color: MUTED, fontSize: '0.75rem' }}>{u.email}</div>
+                    </td>
+                    <td style={cell}>
+                      {isEditing && !u.seeded ? (
+                        <select value={editRole} onChange={(e) => setEditRole(e.target.value)} style={sel}>
+                          {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      ) : (
+                        <>{u.role}{u.seeded && <span style={{ color: MUTED }}> 🔒</span>}</>
+                      )}
+                    </td>
+                    <td style={cell}>
+                      {isEditing && editRole !== 'requester' ? regionChoices(editRole).map((r) => (
+                          <span key={r} style={chip(editRegions.includes(r))} onClick={() => toggle(editRegions, setEditRegions, r)}>{r}</span>
+                        ))
+                        : u.role === 'requester' ? <span style={{ color: MUTED }}>—</span>
+                        : (u.regions.join(', ') || <span style={{ color: MUTED }}>none</span>)}
+                    </td>
+                    <td style={cell}>{u.active ? 'Active' : 'Inactive'}</td>
+                    <td style={cell}>
+                      {u.seeded ? <span style={{ color: MUTED, fontSize: '0.78rem' }}>seeded</span> : isEditing ? (
+                        <>
+                          <button onClick={() => saveEdit(u)} style={{ ...btn, marginRight: 5 }}>Save</button>
+                          <button onClick={() => setEditing(null)} style={btn}>Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => startEdit(u)} style={{ ...btn, marginRight: 5 }}>Edit</button>
+                          <button onClick={() => handleToggleActive(u)} style={btn}>
+                            {u.active ? 'Deactivate' : 'Reactivate'}
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Right column — role descriptions */}
+      <aside style={{ flex: '0 0 260px', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8,
+        padding: '14px 16px', top: 24 }}>
+        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: INK, marginBottom: 12 }}>What each role can do</div>
+        <div style={{ fontSize: '0.8rem', color: MUTED, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div><strong style={{ color: INK }}>Requester</strong> — books Parallel Build work. No approval or admin rights.</div>
           <div><strong style={{ color: INK }}>Approver</strong> — approves/rejects bookings and staffs them, within their assigned regions.</div>
           <div><strong style={{ color: INK }}>Admin</strong> — everything an approver does, plus manages users and blocks dates — all scoped to the regions they hold.</div>
         </div>
-      </div>
-
-      {/* Add user */}
-      <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, padding: 16, marginBottom: 20 }}>
-        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: INK, marginBottom: 10 }}>Add a user</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="work email"
-            style={{ flex: '1 1 200px', padding: '7px 9px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.85rem' }} />
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="display name"
-            style={{ flex: '1 1 140px', padding: '7px 9px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.85rem' }} />
-          <select value={role} onChange={(e) => setRole(e.target.value)}
-            style={{ padding: '7px 9px', border: `1px solid ${BORDER}`, borderRadius: 5, fontSize: '0.85rem' }}>
-            <option value="requester">Requester</option>
-            <option value="approver">Approver</option>
-            <option value="admin">Admin</option>
-          </select>
-        </div>
-        {role !== 'requester' && (
-          <div style={{ marginTop: 10 }}>
-            <span style={{ fontSize: '0.75rem', color: MUTED, marginRight: 6 }}>Regions:</span>
-            {regionChoices(role).map((r) => (
-              <span key={r} style={chip(newRegions.includes(r))} onClick={() => toggle(newRegions, setNewRegions, r)}>{r}</span>
-            ))}
-          </div>
-        )}
-        <button onClick={handleAdd} style={{ ...btn, marginTop: 12, background: ACCENT, color: '#fff', border: 'none', fontWeight: 600 }}>
-          Add user
-        </button>
-      </div>
-
-      {error && <p style={{ color: '#c2410c', fontSize: '0.8rem', margin: '0 0 12px' }}>{error}</p>}
-
-      {/* Search */}
-      {!loading && (
-        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users by name…"
-          style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', marginBottom: 10,
-            border: `1px solid ${BORDER}`, borderRadius: 6, fontSize: '0.85rem' }} />
-      )}
-
-      {/* User table */}
-      {loading ? (
-        <p style={{ color: MUTED, fontSize: '0.85rem' }}>Loading…</p>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
-          <thead>
-            <tr style={{ background: SURFACE }}>
-              {['User', 'Role', 'Regions', 'Status', 'Actions'].map((h) => (
-                <th key={h} style={{ ...cell, fontWeight: 600, color: MUTED, textAlign: 'left', fontSize: '0.72rem', textTransform: 'uppercase' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredUsers.map((u) => {
-              const isEditing = editing === u.email
-              return (
-                <tr key={u.email} style={{ opacity: u.active ? 1 : 0.5 }}>
-                  <td style={cell}>
-                    <div style={{ fontWeight: 600 }}>{u.displayName || u.email.split('@')[0]}</div>
-                    <div style={{ color: MUTED, fontSize: '0.75rem' }}>{u.email}</div>
-                  </td>
-                  <td style={cell}>
-                    {isEditing && !u.seeded ? (
-                      <select value={editRole} onChange={(e) => setEditRole(e.target.value)} style={sel}>
-                        {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    ) : (
-                      <>{u.role}{u.seeded && <span style={{ color: MUTED }}> 🔒</span>}</>
-                    )}
-                  </td>
-                  <td style={cell}>
-                    {isEditing && editRole !== 'requester' ? regionChoices(editRole).map((r) => (
-                        <span key={r} style={chip(editRegions.includes(r))} onClick={() => toggle(editRegions, setEditRegions, r)}>{r}</span>
-                      ))
-                      : u.role === 'requester' ? <span style={{ color: MUTED }}>—</span>
-                      : (u.regions.join(', ') || <span style={{ color: MUTED }}>none</span>)}
-                  </td>
-                  <td style={cell}>{u.active ? 'Active' : 'Inactive'}</td>
-                  <td style={cell}>
-                    {u.seeded ? <span style={{ color: MUTED, fontSize: '0.78rem' }}>seeded</span> : isEditing ? (
-                      <>
-                        <button onClick={() => saveEdit(u)} style={{ ...btn, marginRight: 5 }}>Save</button>
-                        <button onClick={() => setEditing(null)} style={btn}>Cancel</button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => startEdit(u)} style={{ ...btn, marginRight: 5 }}>Edit</button>
-                        <button onClick={() => handleToggleActive(u)} style={btn}>
-                          {u.active ? 'Deactivate' : 'Reactivate'}
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      )}
+      </aside>
     </div>
   )
 }
