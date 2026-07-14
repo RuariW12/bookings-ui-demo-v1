@@ -286,6 +286,7 @@ export default function Schedule() {
   const [viewStart, setViewStart]   = useState(() => sundayOf(new Date()))
   const [selectedId, setSelectedId] = useState(null)
   const [showBlocks, setShowBlocks] = useState(false)
+  const [viewingBlock, setViewingBlock] = useState(null)   // block detail modal
   // Regions whose bookings are hidden. Local view preference only.
   const [collapsed, setCollapsed]   = useState(() => new Set())
 
@@ -351,9 +352,12 @@ export default function Schedule() {
     await refreshBlocks()
   }
 
+  // A block spans blockDate..endDate (inclusive). ISO strings compare lexically.
   function cellBlocks(region, iso) {
     if (!region) return []
-    return blocks.filter((bl) => bl.blockDate === iso && bl.regions.includes(region))
+    return blocks.filter(
+      (bl) => iso >= bl.blockDate && iso <= (bl.endDate || bl.blockDate) && bl.regions.includes(region)
+    )
   }
 
   // ── derived data ───────────────────────────────────────────────────────
@@ -561,19 +565,29 @@ export default function Schedule() {
                       const fill = wholeDay ? BLOCK_FILL.wholeDay
                         : cb.length ? BLOCK_FILL.slot
                         : undefined
+                      // The first block on this cell drives the label + click target.
+                      const primary = cb[0]
                       return (
                         <div
                           key={i}
                           title={cb.length
-                            ? cb.map((bl) => `${bl.blockTime || "All day"}${bl.reason ? " — " + bl.reason : ""}`).join("\n")
+                            ? cb.map((bl) => `${bl.title ? bl.title + " · " : ""}${bl.blockTime || "All day"}${bl.reason ? " — " + bl.reason : ""}`).join("\n")
                             : undefined}
+                          onClick={primary ? () => setViewingBlock(primary) : undefined}
                           className={
                             "sched-bgcell" +
                             (isWeekend(d) ? " weekend" : "") +
-                            (sameDay(d, today) ? " today" : "")
+                            (sameDay(d, today) ? " today" : "") +
+                            (primary ? " blocked" : "")
                           }
                           style={fill ? { background: fill } : undefined}
-                        />
+                        >
+                          {primary?.title && (
+                            <span className="sched-bgcell-label" title={primary.title}>
+                              {primary.title}
+                            </span>
+                          )}
+                        </div>
                       )
                     })}
                   </div>
@@ -657,6 +671,10 @@ export default function Schedule() {
         />
       )}
 
+      {viewingBlock && (
+        <BlockDetailModal block={viewingBlock} onClose={() => setViewingBlock(null)} />
+      )}
+
       {showBlocks && isAdmin && (
         <BlockModal
           blocks={blocks}
@@ -670,15 +688,52 @@ export default function Schedule() {
 }
 
 // ===========================================================================
+// ===========================================================================
+// BlockDetailModal – read-only: click a blocked cell to see why
+// ===========================================================================
+function BlockDetailModal({ block, onClose }) {
+  const D_INK = '#242424', D_MUTED = '#605e5c'
+  const range = block.endDate && block.endDate !== block.blockDate
+    ? `${fmtDate(block.blockDate)} – ${fmtDate(block.endDate)}`
+    : fmtDate(block.blockDate)
+  const row = { display: 'flex', gap: 8, padding: '5px 0', fontSize: '0.85rem' }
+  const key = { color: D_MUTED, flex: '0 0 90px' }
+
+  return (
+    <div className="sched-overlay" onClick={onClose}>
+      <div className="sched-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className="sched-modal-head">
+          <div><h3>{block.title || 'Blocked'}</h3></div>
+          <button className="sched-x" aria-label="Close" onClick={onClose}>×</button>
+        </div>
+        <div className="sched-modal-body">
+          <div style={row}><span style={key}>When</span><span style={{ color: D_INK }}>{range}</span></div>
+          <div style={row}><span style={key}>Time</span><span style={{ color: D_INK }}>{block.blockTime || 'All day'}</span></div>
+          <div style={row}><span style={key}>Regions</span><span style={{ color: D_INK }}>{block.regions.join(', ')}</span></div>
+          <div style={row}>
+            <span style={key}>Reason</span>
+            <span style={{ color: block.reason ? D_INK : D_MUTED }}>{block.reason || 'None given'}</span>
+          </div>
+          {block.createdBy && (
+            <div style={row}><span style={key}>Set by</span><span style={{ color: D_INK }}>{block.createdBy}</span></div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // BlockModal – admin blocks a date/slot across one or more regions
 // ===========================================================================
 function BlockModal({ blocks, onCreate, onRemove, onClose }) {
   const B_INK = '#242424', B_MUTED = '#605e5c', B_BORDER = '#d7d5d2', B_ACCENT = '#e35205'
 
-  const [date, setDate]         = useState('')
+  const [date, setDate]         = useState('')     // range start
+  const [endDate, setEndDate]   = useState('')     // blank = single day
   const [regions, setRegions]   = useState([])
   const [wholeDay, setWholeDay] = useState(true)
   const [time, setTime]         = useState('')
+  const [title, setTitle]       = useState('')
   const [reason, setReason]     = useState('')
   const [err, setErr]           = useState('')
   const [busy, setBusy]         = useState(false)
@@ -699,13 +754,22 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
 
   async function submit() {
     setErr('')
-    if (!date) return setErr('Pick a date')
+    if (!date) return setErr('Pick a start date')
+    if (endDate && endDate < date) return setErr('End date cannot be before the start date')
     if (!regions.length) return setErr('Pick at least one region')
     if (!wholeDay && !time) return setErr('Pick a time or choose whole day')
     setBusy(true)
     try {
-      await onCreate({ blockDate: date, blockTime: wholeDay ? null : time, regions, reason })
-      setDate(''); setRegions([]); setWholeDay(true); setTime(''); setReason('')
+      await onCreate({
+        blockDate: date,
+        endDate: endDate || date,
+        blockTime: wholeDay ? null : time,
+        title,
+        regions,
+        reason,
+      })
+      setDate(''); setEndDate(''); setRegions([]); setWholeDay(true)
+      setTime(''); setTitle(''); setReason('')
     } catch (e) { setErr(e.message) }
     finally { setBusy(false) }
   }
@@ -736,7 +800,11 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
 
         <div className="sched-modal-body">
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            <label style={{ fontSize: '0.75rem', color: B_MUTED }}>From</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={box} />
+            <label style={{ fontSize: '0.75rem', color: B_MUTED }}>to</label>
+            <input type="date" value={endDate} min={date || undefined}
+              onChange={(e) => setEndDate(e.target.value)} style={box} />
             <label style={{ fontSize: '0.8rem', color: B_INK, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               <input type="checkbox" checked={wholeDay} onChange={(e) => setWholeDay(e.target.checked)} />
               Whole day
@@ -755,6 +823,18 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
               <span key={r} style={chip(regions.includes(r))} onClick={() => toggleRegion(r)}>{r}</span>
             ))}
           </div>
+
+          <div style={{ fontSize: '0.72rem', color: B_MUTED, marginTop: 6 }}>
+            Leave “to” blank for a single day.
+            {!wholeDay && ' A time blocks that slot on every day in the range.'}
+          </div>
+
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Title (optional) — shown on the schedule"
+            style={{ ...box, width: '100%', boxSizing: 'border-box', marginTop: 10 }}
+          />
 
           <input
             value={reason}
@@ -785,9 +865,13 @@ function BlockModal({ blocks, onCreate, onRemove, onClose }) {
               sorted.map((bl) => (
                 <div key={bl.id} style={{ display: 'flex', alignItems: 'center', gap: 8,
                   padding: '6px 0', borderBottom: '1px solid #f0efed', fontSize: '0.82rem', color: B_INK }}>
-                  <span style={{ fontWeight: 600 }}>{fmtDate(bl.blockDate)}</span>
+                  <span style={{ fontWeight: 600 }}>
+                    {fmtDate(bl.blockDate)}
+                    {bl.endDate && bl.endDate !== bl.blockDate && ` – ${fmtDate(bl.endDate)}`}
+                  </span>
                   <span style={{ color: B_MUTED }}>{bl.blockTime || 'All day'}</span>
                   <span style={{ color: B_MUTED }}>· {bl.regions.join(', ')}</span>
+                  {bl.title && <span style={{ color: B_INK }}>· {bl.title}</span>}
                   {bl.reason && <span style={{ color: B_MUTED }}>· {bl.reason}</span>}
                   <button
                     onClick={() => handleRemove(bl.id)}

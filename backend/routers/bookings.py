@@ -74,10 +74,12 @@ async def create_booking(booking: BookingCreate):
     pool = await get_pool()
 
     # Reject bookings that land on a blocked date/slot for this region.
-    # A whole-day block has block_time IS NULL; a slot block matches the exact time.
+    # A block spans block_date..end_date (end_date NULL = single day). A whole-day
+    # block has block_time IS NULL; a slot block matches that time on every day
+    # in the range. ISO date strings sort lexically, so BETWEEN on TEXT is correct.
     blocked = await pool.fetchval(
         """SELECT count(*) FROM schedule_blocks
-           WHERE block_date = $1
+           WHERE $1 BETWEEN block_date AND COALESCE(end_date, block_date)
              AND $2 = ANY(regions)
              AND (block_time IS NULL OR block_time = $3)""",
         booking.scheduled_date, booking.region, booking.scheduled_time,

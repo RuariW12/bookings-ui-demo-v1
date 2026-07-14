@@ -198,19 +198,23 @@ function App() {
     [bookings]
   )
 
+  // A block spans blockDate..endDate (inclusive). ISO strings compare lexically.
+  const blockCovers = (bl, iso) => iso >= bl.blockDate && iso <= (bl.endDate || bl.blockDate)
+
   // Whole-day block on a region for a given day?
   const wholeDayBlocked = (region, day) => {
     if (!region) return false
     const iso = fmtISO(day)
-    return blocks.some((bl) => bl.blockDate === iso && !bl.blockTime && bl.regions.includes(region))
+    return blocks.some((bl) => blockCovers(bl, iso) && !bl.blockTime && bl.regions.includes(region))
   }
 
-  // Slot-level blocked times for a region + day.
+  // Slot-level blocked times for a region + day. A timed block applies to that
+  // slot on every day in its range.
   const blockedSlots = (region, day) => {
     const iso = fmtISO(day)
     return new Set(
       blocks
-        .filter((bl) => bl.blockDate === iso && bl.blockTime && bl.regions.includes(region))
+        .filter((bl) => blockCovers(bl, iso) && bl.blockTime && bl.regions.includes(region))
         .map((bl) => bl.blockTime)
     )
   }
@@ -584,7 +588,7 @@ function App() {
               <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} />
             </div>
             <div className="field">
-              <label>DSI</label>
+              <label>Entitlement</label>
               <input type="text" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} />
             </div>
             <div className="field">

@@ -15,7 +15,9 @@ export async function listBlocks() {
   return rows.map((b) => ({
     id: b.id,
     blockDate: b.block_date,
+    endDate: b.end_date || b.block_date,   // single-day blocks end where they start
     blockTime: b.block_time,          // null = whole day
+    title: b.title || '',
     regions: b.regions,
     reason: b.reason,
     createdBy: b.created_by,
@@ -23,13 +25,15 @@ export async function listBlocks() {
   }))
 }
 
-export async function addBlock({ blockDate, blockTime, regions, reason }, actorEmail) {
+export async function addBlock({ blockDate, endDate, blockTime, title, regions, reason }, actorEmail) {
   return req(`${BASE}?actor_email=${encodeURIComponent(actorEmail)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       block_date: blockDate,
+      end_date: endDate || blockDate,
       block_time: blockTime || null,
+      title: title || null,
       regions,
       reason: reason || null,
     }),

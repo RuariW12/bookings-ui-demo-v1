@@ -1,4 +1,3 @@
-
 .sched {
   background: #fff;
   padding: 16px 0 28px;
@@ -154,6 +153,24 @@
   background-color: #fbfafa;
 }
 .sched-bgcell.today { background: #fff8f4; }
+.sched-bgcell.blocked {
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.sched-bgcell-label {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  right: 3px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #605e5c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
 
 /* booking bars */
 .sched-bar {

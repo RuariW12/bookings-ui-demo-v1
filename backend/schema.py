@@ -35,8 +35,10 @@ CREATE TABLE IF NOT EXISTS bookings (
 );
 CREATE TABLE IF NOT EXISTS schedule_blocks (
     id SERIAL PRIMARY KEY,
-    block_date TEXT NOT NULL,
+    block_date TEXT NOT NULL,              -- range start
+    end_date TEXT,                         -- NULL = single day
     block_time TEXT,                       -- NULL = whole day
+    title TEXT,
     regions TEXT[] NOT NULL DEFAULT '{}',
     reason TEXT,
     created_by TEXT,
@@ -47,6 +49,8 @@ CREATE TABLE IF NOT EXISTS schedule_blocks (
 # Idempotent ALTERs for databases created before a column existed.
 MIGRATIONS = """
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS assignees JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE schedule_blocks ADD COLUMN IF NOT EXISTS end_date TEXT;
+ALTER TABLE schedule_blocks ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS cid TEXT;
 """
 

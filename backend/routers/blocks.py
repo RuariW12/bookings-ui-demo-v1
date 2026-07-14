@@ -35,11 +35,16 @@ async def create_block(block: BlockCreate, actor_email: str):
     await _require_admin(pool, actor_email)
     if not block.regions:
         raise HTTPException(400, "At least one region is required")
+    # Normalize: a single-day block stores end_date = block_date.
+    end_date = block.end_date or block.block_date
+    if end_date < block.block_date:
+        raise HTTPException(400, "End date cannot be before the start date")
     row = await pool.fetchrow(
-        """INSERT INTO schedule_blocks (block_date, block_time, regions, reason, created_by)
-           VALUES ($1,$2,$3,$4,$5) RETURNING *""",
-        block.block_date, block.block_time, block.regions,
-        block.reason, actor_email.lower(),
+        """INSERT INTO schedule_blocks
+               (block_date, end_date, block_time, title, regions, reason, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *""",
+        block.block_date, end_date, block.block_time, block.title,
+        block.regions, block.reason, actor_email.lower(),
     )
     return row_to_block(row)
 

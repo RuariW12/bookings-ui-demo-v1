@@ -110,8 +110,10 @@ class CaseCreate(BaseModel):
 
 
 class BlockCreate(BaseModel):
-    block_date: str
-    block_time: str | None = None   # None = whole day
+    block_date: str                 # range start
+    end_date: str | None = None     # None = single day
+    block_time: str | None = None   # None = whole day; else applies to every day in the range
+    title: str | None = None
     regions: list[str] = []
     reason: str | None = None
 
@@ -119,7 +121,9 @@ class BlockCreate(BaseModel):
 class BlockOut(BaseModel):
     id: int
     block_date: str
+    end_date: str | None
     block_time: str | None
+    title: str | None
     regions: list[str]
     reason: str | None
     created_by: str | None
