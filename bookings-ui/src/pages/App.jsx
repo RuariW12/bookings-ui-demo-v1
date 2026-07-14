@@ -584,7 +584,7 @@ function App() {
               <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} />
             </div>
             <div className="field">
-              <label>Entitlement</label>
+              <label>DSI</label>
               <input type="text" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} />
             </div>
             <div className="field">
