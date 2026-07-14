@@ -7,6 +7,7 @@ import { notifyApproversForBooking } from '../lib/notifications'
 import { listBlocks } from '../lib/blocks'
 import { listRequesters } from '../lib/userStore'
 import { listReservations, createReservations } from '../lib/reservations'
+import { useAuth } from '../lib/auth'
 
 const OPERATION_TYPES = {
   build: {
@@ -130,14 +131,16 @@ function slotsFor(region, type, durationHours) {
 }
 
 function App() {
+  const { user } = useAuth()
+
   // operation
   const [operationType, setOperationType] = useState("")  // "" | build | refresh | cutover
   const [tier, setTier] = useState("prod_large")           // refresh only: lower | prod_large
 
-  // region — drives capacity, slot list, and the operating window the times sit in.
+  // region: drives capacity, slot list, and the operating window the times sit in.
   const [region, setRegion] = useState("")
 
-  // entry — ServiceNow lookup with manual fallback ("what you see is what you get")
+  // entry: ServiceNow lookup with manual fallback ("what you see is what you get")
   const [entitlement, setEntitlement] = useState("")
   const [cid, setCid] = useState("")
   const [environment, setEnvironment] = useState("")
@@ -147,7 +150,7 @@ function App() {
   const [companyQuery, setCompanyQuery] = useState("")
   const [company, setCompany] = useState(null)       // resolved SNOW company record
   const [manualEntry, setManualEntry] = useState(false)
-  const [allCompanies, setAllCompanies] = useState([])  // combobox source — every company
+  const [allCompanies, setAllCompanies] = useState([])  // combobox source: every company
   const [companyOpen, setCompanyOpen] = useState(false) // combobox dropdown visibility
 
   // calendar
@@ -155,13 +158,13 @@ function App() {
   const [time, setTime] = useState("")     // start time (refresh/cutover only)
   const [viewDate, setViewDate] = useState(new Date(2026, 5, 1))
 
-  // existing bookings — the real capacity/slot picture, loaded from the backend.
+  // existing bookings: the real capacity/slot picture, loaded from the backend.
   const [bookings, setBookings] = useState([])
 
   // admin-set schedule blocks (per region, whole-day or single slot).
   const [blocks, setBlocks] = useState([])
 
-  // soft holds — CSMs reserving candidate dates before committing to one.
+  // soft holds: CSMs reserving candidate dates before committing to one.
   const [reservations, setReservations] = useState([])
   const [mode, setMode] = useState("book")          // "book" | "reserve"
   const [reserveSlots, setReserveSlots] = useState([])   // [{date, time}]
@@ -191,7 +194,18 @@ function App() {
 
   const loadReservations = () => listReservations().then(setReservations).catch(() => {})
   useEffect(() => { loadReservations() }, [])
-  useEffect(() => { listRequesters().then(setCsmEmails).catch(() => {}) }, [])
+  // The dropdown lists active requesters, plus whoever is signed in. Admins and
+  // approvers aren't requesters, so without this they couldn't pick themselves.
+  useEffect(() => {
+    const mine = (user?.email || "").toLowerCase()
+    const withMe = (emails) => {
+      if (!mine || emails.some((e) => e.toLowerCase() === mine)) return emails
+      return [...emails, mine].sort()
+    }
+    listRequesters()
+      .then((emails) => setCsmEmails(withMe(emails)))
+      .catch(() => setCsmEmails(mine ? [mine] : []))
+  }, [user])
 
   // Normalize backend rows (snake_case) to the shape the calendar logic needs.
   // Cancelled / rejected bookings don't occupy capacity.
@@ -231,7 +245,7 @@ function App() {
   }
 
   // Live holds belonging to someone other than the current CSM. Your own holds
-  // never block you — converting one into a booking is the whole point.
+  // never block you. Converting one into a booking is the whole point.
   const othersHolds = useMemo(
     () => reservations.filter((r) => r.requesterEmail.toLowerCase() !== (csmEmail || "").toLowerCase()),
     [reservations, csmEmail]
@@ -247,7 +261,7 @@ function App() {
     )
   }
 
-  // Your own live holds, newest group first — offered as a shortcut on the form.
+  // Your own live holds, newest group first. Offered as a shortcut on the form.
   const myHolds = useMemo(
     () => reservations.filter((r) => r.requesterEmail.toLowerCase() === (csmEmail || "").toLowerCase()),
     [reservations, csmEmail]
@@ -255,7 +269,7 @@ function App() {
 
   // How many builds occupy a given region on a given calendar day. A build
   // occupies its whole 5-business-day span, not just its start date.
-  // Reserved builds consume capacity exactly like real ones — otherwise another
+  // Reserved builds consume capacity exactly like real ones. Otherwise another
   // CSM books straight over the hold. Only *other* CSMs' holds count, so your
   // own candidate dates never lock you out of booking them.
   const buildCountOnDay = (region, day) => {
@@ -317,7 +331,7 @@ function App() {
   }
 
   // Changing region can invalidate the chosen slot/date (different window,
-  // now taken, or over capacity) — clear both so nothing invalid stays selected.
+  // now taken, or over capacity), so clear both and nothing invalid stays selected.
   const onRegionChange = (r) => {
     setRegion(r)
     setTime("")
@@ -337,7 +351,7 @@ function App() {
 
   // Typing edits the query and deselects any resolved company so stale SNOW
   // values don't linger. No match just leaves `company` null, which keeps the
-  // manual fields below visible — the seamless fallback.
+  // manual fields below visible: the seamless fallback.
   const onCompanyInput = (value) => {
     setCompanyQuery(value)
     setCompanyOpen(true)
@@ -387,7 +401,7 @@ function App() {
   function isSelectable(day) {
     if (!operationType) return false
     if (day < startOfToday()) return false
-    // Refresh defaults to weekdays only — the doc gives no weekend provision
+    // Refresh defaults to weekdays only. The doc gives no weekend provision
     // for refresh (only cutover names one).
     if (operationType === "refresh" && isWeekend(day)) return false
     if (operationType === "build") {
@@ -437,7 +451,7 @@ function App() {
       buildWindowStart: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[0]) : null,
       buildWindowEnd: operationType === "build" && buildSpan.length ? fmtISO(buildSpan[buildSpan.length - 1]) : null,
       date: operationType !== "build" && date ? fmtISO(date) : null,
-      startTime: cfg?.pickTime ? time : null,   // US Eastern — the single anchor for all bookings
+      startTime: cfg?.pickTime ? time : null,   // US Eastern: the single anchor for all bookings
       endTime: endTime || null,
       bookerName, csmEmail, utilityBox, privateNotes,
     }
@@ -445,7 +459,7 @@ function App() {
     console.log("Booking payload:", payload)
 
     // Notify approvers on submit. Independent of the Power Automate flow,
-    // which is blocked by tenant OAuth policy — stubbed sends log to console.
+    // which is blocked by tenant OAuth policy. Stubbed sends log to console.
     notifyApproversForBooking({
       ...payload,
       title: payload.companyName || payload.operationLabel,
@@ -488,10 +502,10 @@ function App() {
       } else {
         let detail = "status " + res.status
         try { detail = (await res.json()).detail || detail } catch {}
-        alert("Booking failed — " + detail)
+        alert("Booking failed: " + detail)
       }
     } catch (err) {
-      alert("Booking submitted (notification logged). Backend unreachable — see console.")
+      alert("Booking submitted (notification logged). Backend unreachable, see console.")
       console.error(err)
     }
   }
@@ -522,12 +536,12 @@ function App() {
         requesterEmail: csmEmail,
         requesterName: bookerName || null,
       })
-      alert(`Reserved ${reserveSlots.length} date(s) — held for 7 days.`)
+      alert(`Reserved ${reserveSlots.length} date(s). Held for 7 days.`)
       setReserveSlots([])
       setReserveReason("")
       loadReservations()
     } catch (e) {
-      alert("Reserve failed — " + e.message)
+      alert("Reserve failed: " + e.message)
     }
   }
 
@@ -554,15 +568,15 @@ function App() {
 
   return (
     <>
-        {/* Book vs Reserve — reserve is a soft hold: no approval, expires in 7 days. */}
-        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        {/* Book vs Reserve. Reserve is a soft hold: no approval, expires in 7 days. */}
+        <div style={{ display: "flex", gap: 6, paddingTop: 24, marginBottom: 14 }}>
           {[["book", "Book"], ["reserve", "Reserve dates"]].map(([m, label]) => (
             <button
               key={m}
               type="button"
               onClick={() => { setMode(m); setFromGroupId(null) }}
               style={{
-                padding: "6px 14px", fontSize: "0.85rem", borderRadius: 6, cursor: "pointer",
+                padding: "6px 14px", fontSize: "0.85rem", borderRadius: 0, cursor: "pointer",
                 border: `1px solid ${mode === m ? "#3a5bbf" : "#cdd6e4"}`,
                 background: mode === m ? "#3a5bbf" : "#fff",
                 color: mode === m ? "#fff" : "#605e5c",
@@ -576,14 +590,14 @@ function App() {
 
         {mode === "reserve" && (
           <div className="warning-box" style={{ background: "#f5f3ff", borderColor: "#c4b5fd" }}>
-            <strong>Soft hold.</strong> Reserved dates aren't sent for approval — they just stop
+            <strong>Soft hold.</strong> Reserved dates aren't sent for approval. They just stop
             other CSMs booking them. They expire automatically after 7 days.
           </div>
         )}
 
         {mode === "book" && myHolds.length > 0 && (
           <div className="warning-box" style={{ background: "#f5f3ff", borderColor: "#c4b5fd" }}>
-            <div style={{ marginBottom: 6 }}><strong>Your reserved dates</strong> — pick one to book for real:</div>
+            <div style={{ marginBottom: 6 }}><strong>Your reserved dates.</strong> Pick one to book for real:</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {myHolds.map((r) => (
                 <button
@@ -684,7 +698,7 @@ function App() {
                 ))
               ) : (
                 <div style={{ padding: "8px 10px", color: "#605e5c", fontSize: "0.85rem" }}>
-                  No match — enter the details manually below.
+                  No match. Enter the details manually below.
                 </div>
               )}
             </div>
@@ -700,7 +714,7 @@ function App() {
             >
               <strong>No ServiceNow match.</strong> This will be booked as{" "}
               <strong>{companyQuery.trim()}</strong> with details entered below. No ServiceNow case
-              will be created on approval — an approver will need to create one manually.
+              will be created on approval. An approver will need to create one manually.
             </div>
           ) : null}
         </div>
@@ -744,7 +758,7 @@ function App() {
               <input type="text" value={cid} onChange={(e) => setCid(e.target.value)} />
             </div>
             <div className="field">
-              <label>Entitlement</label>
+              <label>DSI</label>
               <input type="text" value={entitlement} onChange={(e) => setEntitlement(e.target.value)} />
             </div>
             <div className="field">
@@ -861,7 +875,7 @@ function App() {
                   })}
                   {regionSlots.length === 0 && (
                     <div className="cal-hint">
-                      No valid start times — a {hours}h {cfg.label.toLowerCase()} doesn't fit {region}'s operating hours.
+                      No valid start times. A {hours}h {cfg.label.toLowerCase()} doesn't fit {region}'s operating hours.
                     </div>
                   )}
                   {time && (
@@ -909,11 +923,10 @@ function App() {
         {mode === "reserve" && (
           <>
             <div className="field">
-              <label>Why are these dates being held?</label>
+              <label>Reason</label>
               <textarea
                 value={reserveReason}
                 onChange={(e) => setReserveReason(e.target.value)}
-                placeholder="e.g. Awaiting customer confirmation on the cutover window"
               />
             </div>
 
