@@ -41,6 +41,7 @@ class BookingCreate(BaseModel):
     scheduled_time: str
     company_name: str | None = None
     company_id: str | None = None
+    cid: str | None = None
     environment_id: str | None = None
     environment_name: str | None = None
     host_region: str | None = None
@@ -77,6 +78,7 @@ class BookingOut(BaseModel):
     scheduled_time: str
     company_name: str | None
     company_id: str | None
+    cid: str | None
     environment_id: str | None
     environment_name: str | None
     host_region: str | None
