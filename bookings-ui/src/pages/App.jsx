@@ -503,6 +503,7 @@ function App() {
     } catch (err) {
       alert("Booking failed. Backend unreachable, see console.")
       console.error(err)
+      }
     }
 
   // --- reserve mode ---------------------------------------------------------
