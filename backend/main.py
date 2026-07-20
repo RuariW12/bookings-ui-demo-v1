@@ -3,6 +3,8 @@ from fastapi import FastAPI
 from database import get_pool, close_pool
 from schema import init_schema
 from routers import users, bookings, companies, blocks, employees, reservations
+import logging
+logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
