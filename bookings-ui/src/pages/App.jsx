@@ -458,15 +458,6 @@ function App() {
 
     console.log("Booking payload:", payload)
 
-    // Notify approvers on submit. Independent of the Power Automate flow,
-    // which is blocked by tenant OAuth policy. Stubbed sends log to console.
-    notifyApproversForBooking({
-      ...payload,
-      title: payload.companyName || payload.operationLabel,
-      start: payload.date || payload.buildWindowStart,
-      end: payload.date || payload.buildWindowEnd,
-      submittedBy: payload.csmEmail,
-    })
 
     const bookingBody = {
       operation_type: operationType,
@@ -495,20 +486,24 @@ function App() {
         body: JSON.stringify(bookingBody),
       })
       if (res.ok) {
+        notifyApproversForBooking({
+          ...payload,
+          title: payload.companyName || payload.operationLabel,
+          start: payload.date || payload.buildWindowStart,
+          end: payload.date || payload.buildWindowEnd,
+          submittedBy: payload.csmEmail,
+        })
         alert("Booking saved!")
-        setFromGroupId(null)
-        loadBookings()      // refresh capacity so the calendar reflects this booking
-        loadReservations()  // the converted group is now released
+        loadBookings()   // refresh capacity so the calendar reflects this booking
       } else {
         let detail = "status " + res.status
         try { detail = (await res.json()).detail || detail } catch {}
         alert("Booking failed: " + detail)
       }
     } catch (err) {
-      alert("Booking submitted (notification logged). Backend unreachable, see console.")
+      alert("Booking failed. Backend unreachable, see console.")
       console.error(err)
     }
-  }
 
   // --- reserve mode ---------------------------------------------------------
   const slotKey = (sl) => `${sl.date}|${sl.time || ""}`
