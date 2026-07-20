@@ -3,7 +3,6 @@ import './App.css'
 import { REGIONS, REGION_BUILD_CAPACITY } from '../lib/bookings'
 import { getCompany, activeEnvironments, listCompanies } from '../lib/servicenow'
 import { allowedStartTimes, formatSlot } from '../lib/operatingHours'
-import { notifyApproversForBooking } from '../lib/notifications'
 import { listBlocks } from '../lib/blocks'
 import { listRequesters } from '../lib/userStore'
 import { listReservations, createReservations } from '../lib/reservations'
@@ -486,13 +485,6 @@ function App() {
         body: JSON.stringify(bookingBody),
       })
       if (res.ok) {
-        notifyApproversForBooking({
-          ...payload,
-          title: payload.companyName || payload.operationLabel,
-          start: payload.date || payload.buildWindowStart,
-          end: payload.date || payload.buildWindowEnd,
-          submittedBy: payload.csmEmail,
-        })
         alert("Booking saved!")
         loadBookings()   // refresh capacity so the calendar reflects this booking
       } else {

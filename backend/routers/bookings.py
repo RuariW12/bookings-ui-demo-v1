@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from database import get_pool
 from models import BookingCreate, BookingUpdate, AssignUpdate, BookingOut
 from snow import create_case
+from notifications import notify_approvers_for_booking
 
 router = APIRouter(prefix="/api/bookings", tags=["bookings"])
 
@@ -126,7 +127,12 @@ async def create_booking(booking: BookingCreate):
                          AND lower(requester_email) = $2""",
                     booking.reservation_group_id, requester,
                 )
-    return _row(row)
+
+    # Booking has committed. Notify regional approvers on a best-effort basis;
+    # a mail failure is logged inside the helper and never fails the booking.
+    created = _row(row)
+    await notify_approvers_for_booking(pool, created)
+    return created
 
 
 @router.patch("/{booking_id}", response_model=BookingOut)
