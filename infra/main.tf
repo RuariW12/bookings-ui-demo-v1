@@ -1,8 +1,8 @@
 # Test-account infra, hardened for reproducible bootstrap.
 # Scoped to what the test account can prove: EC2 boots, Docker builds on ARM, the
 # stack comes up over plain HTTP on the Elastic IP. No domain -> no Let's Encrypt/443.
-# github_token + userconfig_js SSM params are prod-readiness scaffolding: inert
-# ("UNSET") on the test account, set out-of-band for prod.
+# github_token + graph_* SSM params are prod-readiness scaffolding: inert ("UNSET")
+# on the test account, set out-of-band for prod.
 
 data "aws_caller_identity" "current" {}
 
@@ -134,12 +134,39 @@ resource "aws_ssm_parameter" "github_token" {
   }
 }
 
-# Full contents of bookings-ui/src/lib/userConfig.js (gitignored, real emails/
-# regions). "UNSET" -> bootstrap keeps whatever the repo ships (the committed
-# stub). Set out-of-band for prod so the real config never lives in the repo.
-resource "aws_ssm_parameter" "userconfig_js" {
-  name  = "/${var.app_name}/userconfig_js"
+# Microsoft Graph app-only config for approver email notifications. All "UNSET"
+# on the test account (notifier no-ops); set out-of-band for prod. tenant/client
+# id and sender are non-secret; the client secret is a SecureString.
+resource "aws_ssm_parameter" "graph_tenant_id" {
+  name  = "/${var.app_name}/graph_tenant_id"
+  type  = "String"
+  value = "UNSET"
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+resource "aws_ssm_parameter" "graph_client_id" {
+  name  = "/${var.app_name}/graph_client_id"
+  type  = "String"
+  value = "UNSET"
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+resource "aws_ssm_parameter" "graph_client_secret" {
+  name  = "/${var.app_name}/graph_client_secret"
   type  = "SecureString"
+  value = "UNSET"
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+resource "aws_ssm_parameter" "graph_sender" {
+  name  = "/${var.app_name}/graph_sender"
+  type  = "String"
   value = "UNSET"
   lifecycle {
     ignore_changes = [value]
@@ -175,7 +202,10 @@ resource "aws_instance" "app" {
     aws_iam_role_policy_attachment.ssm_core,
     aws_ssm_parameter.db_password,
     aws_ssm_parameter.github_token,
-    aws_ssm_parameter.userconfig_js,
+    aws_ssm_parameter.graph_tenant_id,
+    aws_ssm_parameter.graph_client_id,
+    aws_ssm_parameter.graph_client_secret,
+    aws_ssm_parameter.graph_sender,
   ]
 
   user_data = <<EOT
@@ -239,6 +269,10 @@ get() {
   retry aws ssm get-parameter --name "$1" --with-decryption --query 'Parameter.Value' --output text --region "${var.aws_region}"
 }
 
+# Optional-config reader: "UNSET" (the param default) becomes an empty string, so
+# the backend's "configured?" checks stay false until real values are set.
+blank_if_unset() { [ "$1" = "UNSET" ] && echo "" || echo "$1"; }
+
 APP_DIR=/opt/bookings
 mkdir -p "$APP_DIR"
 
@@ -251,25 +285,28 @@ else
 fi
 retry git clone --branch "${var.git_branch}" --depth 1 "$CLONE_URL" "$APP_DIR/src"
 
-# Overwrite userConfig.js from SSM when provided; otherwise keep the repo's copy.
-USERCONFIG=$(get "/${var.app_name}/userconfig_js")
-if [ "$USERCONFIG" != "UNSET" ] && [ -n "$USERCONFIG" ]; then
-  DEST="$APP_DIR/src/bookings-ui/src/lib/userConfig.js"
-  mkdir -p "$(dirname "$DEST")"
-  printf '%s' "$USERCONFIG" > "$DEST"
-fi
+# Approver-email config (empty unless set out-of-band for prod).
+GRAPH_TENANT=$(blank_if_unset "$(get "/${var.app_name}/graph_tenant_id")")
+GRAPH_CLIENT=$(blank_if_unset "$(get "/${var.app_name}/graph_client_id")")
+GRAPH_SECRET=$(blank_if_unset "$(get "/${var.app_name}/graph_client_secret")")
+GRAPH_SENDER=$(blank_if_unset "$(get "/${var.app_name}/graph_sender")")
 
 # http:// DOMAIN makes Caddy serve plain HTTP (no ACME), same as the local .env.
 # ACME_EMAIL kept as a harmless placeholder so compose doesn't warn.
 cat > "$APP_DIR/src/.env" <<ENV
 DOMAIN=http://${aws_eip.app.public_ip}
 ACME_EMAIL=${var.acme_email}
-POSTGRES_USER=bookings_admin
+POSTGRES_USER=bookings
 POSTGRES_DB=${var.db_name}
 POSTGRES_PASSWORD=$(get "/${var.app_name}/db_password")
 VITE_ENTRA_CLIENT_ID=UNSET
 VITE_ENTRA_TENANT_ID=UNSET
 VITE_REDIRECT_URI=http://${aws_eip.app.public_ip}/
+BOOKINGS_GRAPH_TENANT_ID=$GRAPH_TENANT
+BOOKINGS_GRAPH_CLIENT_ID=$GRAPH_CLIENT
+BOOKINGS_GRAPH_CLIENT_SECRET=$GRAPH_SECRET
+BOOKINGS_GRAPH_SENDER=$GRAPH_SENDER
+BOOKINGS_APP_APPROVALS_URL=http://${aws_eip.app.public_ip}/approvals
 ENV
 chmod 600 "$APP_DIR/src/.env"
 
