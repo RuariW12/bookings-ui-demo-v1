@@ -155,7 +155,10 @@ function App() {
   // calendar
   const [date, setDate] = useState(null)   // build: delivery date; refresh/cutover: operation date
   const [time, setTime] = useState("")     // start time (refresh/cutover only)
-  const [viewDate, setViewDate] = useState(new Date(2026, 5, 1))
+  const [viewDate, setViewDate] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
 
   // existing bookings: the real capacity/slot picture, loaded from the backend.
   const [bookings, setBookings] = useState([])
