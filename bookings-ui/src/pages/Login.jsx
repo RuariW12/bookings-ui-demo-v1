@@ -9,11 +9,9 @@ const ACCENT = '#e35205'
 const ACCENT_DK = '#cf4a04'
 const SURFACE = '#f3f2f1'
 
-// Microsoft four-square glyph, rendered white to sit on the accent button.
 function MsGlyph() {
   return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"
-      style={{ display: 'block' }}>
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block' }}>
       <rect x="0" y="0" width="7" height="7" fill="#fff" />
       <rect x="9" y="0" width="7" height="7" fill="#fff" opacity="0.85" />
       <rect x="0" y="9" width="7" height="7" fill="#fff" opacity="0.85" />
@@ -23,28 +21,28 @@ function MsGlyph() {
 }
 
 export default function Login() {
-  const { msalSignIn } = useAuth()
-  const [msg, setMsg] = useState(null) // { tone: 'error' | 'info', text }
+  const { msalSignIn, authError } = useAuth()
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleMsal() {
-    setMsg(null)
+    setError('')
     setLoading(true)
     try {
-      const recognized = await msalSignIn()
-      if (!recognized) {
-        setMsg({
-          tone: 'info',
-          text: 'That account isn’t authorized for bookings. Contact your Cloud Support admin.',
-        })
-      }
+      await msalSignIn() // navigates to Microsoft; page unloads on success
     } catch (e) {
-      if (e.errorCode === 'user_cancelled') return
-      setMsg({ tone: 'error', text: 'Sign-in didn’t complete. Try again.' })
-    } finally {
+      if (e.errorCode === 'user_cancelled') { setLoading(false); return }
+      setError('Sign-in didn’t complete. Try again.')
       setLoading(false)
     }
   }
+
+  // Post-redirect authorization failure (from context) or a local pre-navigation error.
+  const msg = error
+    ? { tone: 'error', text: error }
+    : authError
+    ? { tone: 'info', text: authError }
+    : null
 
   return (
     <div style={{
@@ -56,13 +54,11 @@ export default function Login() {
         .sg-msbtn {
           width: 100%; display: flex; align-items: center; justify-content: center;
           gap: 10px; padding: 11px 0; font-size: 0.9rem; font-weight: 600;
-          color: #fff; background: ${ACCENT}; border: none; border-radius: 8;
+          color: #fff; background: ${ACCENT}; border: none; border-radius: 8px;
           cursor: pointer; transition: background .15s ease, box-shadow .15s ease;
         }
         .sg-msbtn:hover:not(:disabled) { background: ${ACCENT_DK}; }
-        .sg-msbtn:focus-visible {
-          outline: none; box-shadow: 0 0 0 3px rgba(227,82,5,0.35);
-        }
+        .sg-msbtn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(227,82,5,0.35); }
         .sg-msbtn:disabled { background: #b9b7b4; cursor: default; }
         .sg-spinner {
           width: 15px; height: 15px; border-radius: 50%;
@@ -78,7 +74,6 @@ export default function Login() {
           border: `1px solid ${HAIRLINE}`,
           boxShadow: '0 6px 24px rgba(36,36,36,0.08), 0 1px 2px rgba(36,36,36,0.06)',
         }}>
-          {/* Signature: brand accent rule */}
           <div style={{ height: 3, background: ACCENT }} />
 
           <div style={{ padding: '30px 28px 26px' }}>
@@ -115,8 +110,7 @@ export default function Login() {
 
             {msg && (
               <p role={msg.tone === 'error' ? 'alert' : 'status'} style={{
-                margin: '14px 0 0', fontSize: '0.82rem', lineHeight: 1.4,
-                textAlign: 'center',
+                margin: '14px 0 0', fontSize: '0.82rem', lineHeight: 1.4, textAlign: 'center',
                 color: msg.tone === 'error' ? '#c0392b' : '#8a5a00',
               }}>
                 {msg.text}
@@ -128,12 +122,8 @@ export default function Login() {
             borderTop: `1px solid ${HAIRLINE}`, padding: '11px 28px',
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}>
-            <span style={{
-              width: 6, height: 6, borderRadius: '50%', background: '#7a7a7a',
-            }} />
-            <span style={{ fontSize: '0.74rem', color: MUTED }}>
-              Secured with Microsoft Entra ID
-            </span>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#7a7a7a' }} />
+            <span style={{ fontSize: '0.74rem', color: MUTED }}>Secured with Microsoft Entra ID</span>
           </div>
         </div>
       </div>

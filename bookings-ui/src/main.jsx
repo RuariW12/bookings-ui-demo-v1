@@ -7,7 +7,6 @@ import { msalInstance } from './lib/msalConfig.js'
 
 async function bootstrap() {
   await msalInstance.initialize()
-  await msalInstance.handleRedirectPromise() // completes/clears any leftover redirect
 
   createRoot(document.getElementById('root')).render(
     <StrictMode>

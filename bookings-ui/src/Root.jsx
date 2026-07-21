@@ -9,7 +9,7 @@ import { useAuth } from './lib/auth'
 import './pages/App.css'
 
 export default function Root() {
-  const { user, isAuthenticated, signOut } = useAuth()
+  const { user, isAuthenticated, signOut, initializing } = useAuth()
   const [tab, setTab] = useState("book")  // "book" | "schedule" | "approvals" | "admin"
 
   useEffect(() => {
@@ -18,6 +18,16 @@ export default function Root() {
     else if (user.isApprover) setTab("approvals")
     else setTab("book")
   }, [user])
+
+  // Brief branded splash while a redirect sign-in completes.
+  if (initializing) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', background: '#f3f2f1' }}>
+        <img src={strategyLogo} alt="Strategy" style={{ width: 150, opacity: 0.9 }} />
+      </div>
+    )
+  }
 
   // Gate: nothing renders until you've signed in.
   if (!isAuthenticated) return <Login />
