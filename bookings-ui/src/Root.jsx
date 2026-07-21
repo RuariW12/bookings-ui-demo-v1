@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import App from './pages/App'          // booking form (just the fields)
 import Schedule from './pages/Schedule'
 import Approvals from './pages/approvals'
@@ -12,12 +12,6 @@ export default function Root() {
   const { user, isAuthenticated, signOut, initializing } = useAuth()
   const [tab, setTab] = useState("book")  // "book" | "schedule" | "approvals" | "admin"
 
-  useEffect(() => {
-    if (!user) return
-    if (user.isAdmin) setTab("admin")
-    else if (user.isApprover) setTab("approvals")
-    else setTab("book")
-  }, [user])
 
   // Brief branded splash while a redirect sign-in completes.
   if (initializing) {
