@@ -216,7 +216,9 @@ function SearchBox({ bookings, onSelect }) {
   const suggestions = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
-    return bookings.filter((b) => (b.cid || '').toLowerCase().includes(q))
+    return bookings.filter((b) =>
+      `${b.cid || ''} ${b.companyName || ''}`.toLowerCase().includes(q)
+    )
   }, [query, bookings])
 
   useEffect(() => {
@@ -273,7 +275,7 @@ function SearchBox({ bookings, onSelect }) {
         ref={inputRef}
         className="sched-search"
         type="text"
-        placeholder="Search by CID…"
+        placeholder="Search CID or company…"
         value={query}
         autoComplete="off"
         spellCheck={false}
@@ -298,7 +300,7 @@ function SearchBox({ bookings, onSelect }) {
                 commit(b)
               }}
             >
-              <span className="sb-item-title">{b.cid}</span>
+              <span className="sb-item-title">{b.cid || b.companyName || 'No CID'}</span>
               <span className="sb-item-meta">
                 {[b.companyName, b.region ?? 'No region', fmtDate(b.start)].filter(Boolean).join(' · ')}
               </span>
