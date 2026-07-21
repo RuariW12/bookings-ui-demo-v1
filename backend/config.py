@@ -7,6 +7,10 @@ class Settings(BaseSettings):
     snow_username: str = ""
     snow_password: str = ""
 
+    # Demo branch only: serve ServiceNow autofill + case creation from fixtures.
+    # Set BOOKINGS_SNOW_MOCK=true in the demo .env. Never enable in prod.
+    snow_mock: bool = False
+
     # Microsoft Graph (app-only / client credentials) for approver notifications.
     # Leave any blank to disable sending; notify() then no-ops and logs.
     graph_tenant_id: str = ""

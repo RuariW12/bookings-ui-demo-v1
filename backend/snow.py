@@ -1,6 +1,7 @@
 import httpx
 from fastapi import HTTPException
 from config import settings
+import snow_mock
 
 # Confirmed u_cmdb_ci_dsi columns (live-verified):
 #   sys_id, name, u_platform, u_version, u_dsi_cloenv, u_status_2, u_migration_mce
@@ -31,6 +32,8 @@ def _dsi_to_environment(row: dict) -> dict:
     }
 
 async def list_companies() -> list[dict]:
+    if settings.snow_mock:
+        return await snow_mock.list_companies()
     async with _client() as client:
         resp = await client.get(
             "/api/now/table/customer_account",
@@ -48,6 +51,8 @@ async def list_companies() -> list[dict]:
         ]
 
 async def get_company(cid: str) -> dict:
+    if settings.snow_mock:
+        return await snow_mock.get_company(cid)
     async with _client() as client:
         acct_resp = await client.get(
             "/api/now/table/customer_account",
@@ -84,6 +89,8 @@ async def get_company(cid: str) -> dict:
         }
 
 async def create_case(payload: dict) -> dict:
+    if settings.snow_mock:
+        return await snow_mock.create_case(payload)
     async with _client() as client:
         resp = await client.post("/api/now/table/sn_customerservice_case", json=payload)
         if resp.status_code not in (200, 201):
